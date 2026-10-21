@@ -1,0 +1,20 @@
+# TubeHAX homelab stack. Deploy: ./deploy.sh (copies this folder to the homelab and runs compose).
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    container_name: tubehax-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # MQTT (clock, Mac bridge)
+      - "9001:9001"   # MQTT over WebSockets (browser admin page)
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - mosquitto-data:/mosquitto/data
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+
+volumes:
+  mosquitto-data:

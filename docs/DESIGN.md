@@ -36,6 +36,8 @@ Ideas and progress are tracked in the [GitHub Project](https://github.com/users/
 └───────────────────────────────────────┘        └──────────┘        └────────────────┘
 ```
 
+A browser admin page (any device on the LAN or NetBird) talks to the same broker over MQTT-over-WebSockets — see [Homelab](#homelab) and [Admin web](#admin-web).
+
 Principles:
 
 1. **The clock never talks to the Mac directly.** Everything goes through the broker, so the clock keeps working when the Mac sleeps, and the bridge keeps working when the clock reboots.
@@ -49,7 +51,7 @@ Principles:
 |---|---|---|
 | Working / waiting / done state | async hooks | `UserPromptSubmit` → working, `PreToolUse`/`PostToolUse` → tool activity, `Notification` (`permission_prompt`, `idle_prompt`) → waiting for you, `Stop` → done, `SessionStart`/`SessionEnd` |
 | Active work timer | hooks | timestamp of `UserPromptSubmit` until `Stop` |
-| Plan usage window | statusLine JSON | `rate_limits.five_hour.{used_percentage,resets_at}`, `rate_limits.seven_day.*` (Pro/Max only, after first API response) |
+| Plan usage window | statusLine JSON | `rate_limits.five_hour.{used_percentage,resets_at}`, `rate_limits.seven_day.*` (Pro/Max only — we are on Max; present after the first API response) |
 | Context / tokens | statusLine JSON | `context_window.{used_percentage,total_input_tokens,total_output_tokens,context_window_size}` |
 | Session elapsed / cost | statusLine JSON | `cost.{total_duration_ms,total_cost_usd,total_lines_added,total_lines_removed}`, `model.display_name` |
 | "I switched to the terminal" | bridge (macOS) | Claude Code has **no** focus event; the bridge watches the frontmost app instead |
@@ -127,6 +129,33 @@ Prefix: `tubehax/`. JSON payloads, UTF-8. Timestamps are Unix epoch seconds (flo
 - Re-subscribe on every reconnect; retained topics restore the state.
 - Broker host/port/credentials changeable at runtime (stored in NVS) without reflashing; optional mDNS lookup of the homelab broker.
 - Small unobtrusive "link" indicator (pixel icon) when the broker is unreachable; time display never depends on the network.
+
+## Homelab
+
+The homelab (`fuisl`, Ubuntu 24.04, LAN `192.168.1.13`, NetBird `100.82.196.126`) hosts everything server-side as one Docker Compose stack in [`homelab/`](../homelab/), deployed with `homelab/deploy.sh`.
+
+| Service | Port | Notes |
+|---|---|---|
+| Mosquitto 2.0 | 1883 (MQTT), 9001 (WebSockets) | Password auth, no anonymous access; users `clock`, `bridge`, `admin`. Persistence on, so retained state survives restarts. 64 MB memory cap. |
+| Admin web | served by Mosquitto on 9001 (stage 1) | See below. |
+
+- LAN only for now: the clock connects to `192.168.1.13:1883`. `fuisl` resolves through NetBird on the Mac; other LAN devices use `fuisl.local` or the IP.
+- Passwords are generated per client, kept on the homelab in `homelab/mosquitto/passwd` (not in git) and on the Mac in `~/.config/tubehax/broker.env` (mode 600). Add or rotate with `homelab/add-user.sh <user>`.
+
+## Admin web
+
+A small control page at `http://fuisl:9001/` for operating the clock from any browser — the clock's "admin panel".
+
+**Minimal resources first.** Stage 1 has no backend at all: a static single-page app (vanilla JS + MQTT.js, no build step) served by Mosquitto's own WebSocket listener (`http_dir`). It logs in as the `admin` MQTT user and speaks the same MQTT contract as everything else, so it costs zero extra containers or RAM. A backend (a tiny Go service, ~10 MB RAM) is added only when something needs server-side state (schedules, history, firmware hosting).
+
+Features, roughly in order:
+
+1. Live clock status: online/offline (LWT), current mode, WiFi RSSI, IP, firmware version, uptime.
+2. Switch mode; set / start / pause / reset the countdown; trigger Claude or Music views.
+3. Display + backlight: on/off, brightness, night-dimming window, backlight color/pattern.
+4. Live mirror of what the bridge publishes (Claude state, limits, now playing) for debugging.
+5. Settings that today require a reflash: timezone, 12/24 h, broker host, auto-switch rules.
+6. Firmware: upload a `.bin`, the clock pulls it over HTTP (OTA) — needs the stage-2 backend or an HTTP endpoint on the clock.
 
 ## Flash budget
 

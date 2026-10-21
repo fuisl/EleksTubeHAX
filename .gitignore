@@ -47,3 +47,6 @@ backups/
 
 # Claude Code agent worktrees.
 .claude/worktrees/
+
+# Broker password file (lives only on the homelab).
+homelab/mosquitto/passwd
