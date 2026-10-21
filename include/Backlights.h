@@ -97,6 +97,12 @@ public:
   }
   uint8_t getEffectiveIntensity(); // intensity actually driven to the LEDs: night-time dimmed level or configured intensity
 
+  // Lets a mode drive the LEDs directly (e.g. countdown progress). Colors are 0xRRGGBB, scaled by the
+  // effective intensity; power off still wins. The configured pattern resumes after releaseOverride().
+  void setOverride(uint8_t led, uint32_t color);
+  void releaseOverride();
+  bool hasOverride() { return override_active; }
+
   // Helper methods
   uint32_t phaseToColor(uint16_t phase);
   uint32_t hueToPhase(float hue);
@@ -108,6 +114,8 @@ public:
 
 private:
   bool dimming = false;
+  bool override_active = false;
+  uint32_t override_colors[NUM_BACKLIGHT_LEDS] = {};
   bool pattern_needs_init;
   bool off;
 

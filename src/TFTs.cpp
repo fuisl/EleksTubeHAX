@@ -123,14 +123,14 @@ void TFTs::setDigit(uint8_t digit, uint8_t value, show_t show)
     {
       showDigit(digit);
 
-      if (digit == SECONDS_ONES)
+      if (digit == SECONDS_ONES && show_status_overlays)
         if (WifiState != connected)
         {
           showNoWifiStatus();
         }
 
 #if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
-      if (digit == SECONDS_TENS)
+      if (digit == SECONDS_TENS && show_status_overlays)
         if (!MQTTConnected)
         {
           showNoMqttStatus();
@@ -159,9 +159,8 @@ void TFTs::showDigit(uint8_t digit)
       uint8_t file_index = current_graphic * 10 + digits[digit];
       DrawImage(file_index);
 
-      uint8_t NextNumber = digits[SECONDS_ONES] + 1;
-      if (NextNumber > 9)
-        NextNumber = 0; // pre-load only seconds, because they are drawn first
+      // Pre-load the image the fastest changing digit will need next.
+      uint8_t NextNumber = (digits[preload_position] + 10 + preload_step) % 10;
       NextFileRequired = current_graphic * 10 + NextNumber;
     }
   }
@@ -592,3 +591,4 @@ uint8_t TFTs::nameToClockFace(String name)
   return 1;
 }
 //// END STOLEN CODE
+

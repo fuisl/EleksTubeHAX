@@ -15,11 +15,14 @@
 #include "Backlights.h"
 #include "Buttons.h"
 #include "Clock.h"
-#include "Menu.h"
 #include "StoredConfig.h"
 #include "TFTs.h"
 #include "WiFi_WPS.h"
 #include "OTA.h"
+#include "App.h"
+#include "ClockApp.h"
+#include "CountdownApp.h"
+#include "SettingsApp.h"
 
 #ifdef GEOLOCATION_ENABLED
 #include "IPGeolocation_AO.h"
@@ -35,8 +38,13 @@ Backlights backlights;
 Buttons buttons;
 TFTs tfts;
 Clock uclock;
-Menu menu;
 StoredConfig stored_config;
+
+AppManager apps;
+ClockApp clockApp;
+CountdownApp countdownApp;
+SettingsApp settingsApp(clockApp);
+App *const modeCycle[] = {&clockApp, &countdownApp}; // MODE tap order
 
 #ifdef GEOLOCATION_ENABLED
 double GeoLocTZoffset = 0;
@@ -60,8 +68,6 @@ uint8_t hour_old = 255;
 uint32_t lastMQTTCommandExecuted = (uint32_t)-1;
 
 // Helper function, defined below.
-void updateClockDisplay(TFTs::show_t show = TFTs::yes);
-void setupMenu(void);
 #ifdef DIMMING
 bool isNightTime(uint8_t current_hour);
 void checkDimmingNeeded(void);
@@ -129,7 +135,6 @@ void setup()
 
   backlights.begin(&stored_config.config.backlights);
   buttons.begin();
-  menu.begin();
 
   // Setup the displays (TFTs) initaly and show bootup message(s).
   tfts.begin(); // ...and count number of clock faces available...
@@ -227,7 +232,7 @@ void setup()
   // Start up the clock displays.
   tfts.fillScreen(TFT_BLACK);
   uclock.loop();
-  updateClockDisplay(TFTs::force); // Draw all the clock digits
+  apps.begin(&clockApp, &settingsApp, modeCycle, sizeof(modeCycle) / sizeof(modeCycle[0])); // Draws the clock
   Serial.println("Starting main loop...");
 }
 
@@ -274,7 +279,7 @@ void loop()
       if (!tfts.isEnabled())
       {
         tfts.enableAllDisplays();
-        updateClockDisplay(TFTs::force); // Redraw all the clock digits; needed because the displays was blanked before turning off
+        apps.redraw(); // Needed because the displays were blanked before turning off
       }
     }
     else
@@ -317,7 +322,7 @@ void loop()
     Serial.println(idx);
     uclock.setClockGraphicsIdx(idx);
     tfts.current_graphic = uclock.getActiveGraphicIdx();
-    updateClockDisplay(TFTs::force); // Redraw everything
+    apps.redraw(); // Redraw everything
   }
 
   if (MQTTCommandMainBrightnessReceived)
@@ -325,7 +330,7 @@ void loop()
     MQTTCommandMainBrightnessReceived = false;
     tfts.dimming = MQTTCommandMainBrightness;
     tfts.ProcessUpdatedDimming();
-    updateClockDisplay(TFTs::force);
+    apps.redraw();
   }
 
   if (MQTTCommandBackBrightnessReceived)
@@ -382,7 +387,7 @@ void loop()
 
     uclock.setClockGraphicsIdx(MQTTCommandGraphic);
     tfts.current_graphic = uclock.getActiveGraphicIdx();
-    updateClockDisplay(TFTs::force); // Redraw everything
+    apps.redraw(); // Redraw everything
   }
 
   if (MQTTCommandMainGraphicReceived)
@@ -390,7 +395,7 @@ void loop()
     MQTTCommandMainGraphicReceived = false;
     uclock.setClockGraphicsIdx(MQTTCommandMainGraphic);
     tfts.current_graphic = uclock.getActiveGraphicIdx();
-    updateClockDisplay(TFTs::force); // Redraw everything
+    apps.redraw(); // Redraw everything
   }
 
   if (MQTTCommandUseTwelveHoursReceived)
@@ -450,7 +455,7 @@ void loop()
 
   if (lastMQTTCommandExecuted != -1)
   {
-    if (((millis() - lastMQTTCommandExecuted) > (MQTT_SAVE_PREFERENCES_AFTER_SEC * 1000)) && menu.getState() == Menu::idle)
+    if (((millis() - lastMQTTCommandExecuted) > (MQTT_SAVE_PREFERENCES_AFTER_SEC * 1000)) && !apps.isActive(&settingsApp))
     { // Save the config after a while (default is 60 seconds) if no new MQTT command was received and we are not in the menu.
       lastMQTTCommandExecuted = -1;
 
@@ -462,268 +467,17 @@ void loop()
 #endif
 
   buttons.loop();
-
-  // Power button: If in menu, exit menu. Else turn off displays and backlight.
-  if (buttons.power.isDownEdge() && (menu.getState() == Menu::idle))
-  { // Power button was pressed: if in the menu, exit menu, else turn off displays and backlight.
-    if (tfts.isEnabled())
-    { // Check if TFT state is enabled and switch OFF the LCDs and LED backlights.
-      tfts.chip_select.setAll();
-      tfts.fillScreen(TFT_BLACK); // Blank the screens before turning off; needed for all clocks without a real power switch circuit
-      tfts.disableAllDisplays();
-      backlights.PowerOff();
-    }
-    else
-    {                           // TFT state is disabled, turn ON the displays and backlights
-      tfts.enableAllDisplays();
-      updateClockDisplay(TFTs::force); // Redraw all the clock digits; needed because the displays was blanked before turning off
-      backlights.PowerOn();
-    }
-  }
-
-  menu.loop(buttons); // Must be called after buttons.loop()
-
-  backlights.loop();
   uclock.loop();
+  apps.loop(buttons); // Button gestures, mode switching, timers and drawing of the active mode
+  backlights.loop();  // After the modes, they may override the LEDs
 
 #ifdef DIMMING
   checkDimmingNeeded(); // Night or day time brightness change
 #endif
 
-  updateClockDisplay(); // Draw only the changed clock digits!
-
 #ifdef GEOLOCATION_ENABLED
   checkUpdateGeoLocNeeded(); // Check if it is time to update geolocation based timezone offset (just once per day)
 #endif
-
-  // Menu
-  if (menu.stateChanged() && tfts.isEnabled())
-  {
-    Menu::states menu_state = menu.getState();
-    int8_t menu_change = menu.getChange();
-
-    if (menu_state == Menu::idle)
-    {
-      // We just changed into idle, so force a redraw of all clock digits and save the config.
-      updateClockDisplay(TFTs::force); // Redraw everything
-      Serial.println();
-      Serial.print("Saving config! Triggered from leaving menu...");
-      stored_config.save();
-      Serial.println(" Done.");
-    }
-    else
-    {
-      // Backlight Pattern
-      if (menu_state == Menu::backlight_pattern)
-      {
-        if (menu_change != 0)
-        {
-          backlights.setNextPattern(menu_change);
-        }
-        setupMenu();
-        tfts.println("Pattern:");
-        tfts.println(backlights.getPatternStr());
-      }
-      // Backlight Color
-      else if (menu_state == Menu::pattern_color)
-      {
-        if (menu_change != 0)
-        {
-          backlights.adjustColorPhase(menu_change * 16);
-        }
-        setupMenu();
-        tfts.println("Color:");
-        tfts.printf("%06X\n", backlights.getColor());
-      }
-      // Backlight Intensity
-      else if (menu_state == Menu::backlight_intensity)
-      {
-        if (menu_change != 0)
-        {
-          backlights.adjustIntensity(menu_change);
-        }
-        setupMenu();
-        tfts.println("Intensity:");
-        tfts.println(backlights.getIntensity());
-      }
-      // 12 Hour or 24 Hour mode?
-      else if (menu_state == Menu::twelve_hour)
-      {
-        if (menu_change != 0)
-        {
-          uclock.toggleTwelveHour();
-          tfts.setDigit(HOURS_TENS, uclock.getHoursTens(), TFTs::force);
-          tfts.setDigit(HOURS_ONES, uclock.getHoursOnes(), TFTs::force);
-        }
-        setupMenu();
-        tfts.println("Hour format");
-        tfts.println(uclock.getTwelveHour() ? "12 hour" : "24 hour");
-      }
-      // Blank leading zeros on the hours?
-      else if (menu_state == Menu::blank_hours_zero)
-      {
-        if (menu_change != 0)
-        {
-          uclock.toggleBlankHoursZero();
-          tfts.setDigit(HOURS_TENS, uclock.getHoursTens(), TFTs::force);
-        }
-        setupMenu();
-        tfts.println("Blank zero?");
-        tfts.println(uclock.getBlankHoursZero() ? "yes" : "no");
-      }
-      // UTC Offset, hours
-      else if (menu_state == Menu::utc_offset_hour)
-      {
-        time_t currOffset = uclock.getTimeZoneOffset();
-
-        if (menu_change != 0)
-        {
-          // calculate the new offset
-          time_t newOffsetAdjustmentValue = menu_change * 3600;
-          time_t newOffset = currOffset + newOffsetAdjustmentValue;
-
-          // check if the new offset is within the allowed range of -12 to +12 hours
-          // If the minutes part of the offset is 0, we want to change from +12 to -12 or vice versa (without changing the shown time on the displays)
-          // If the minutes part is not 0: We want to wrap around to the other side and change the minutes part (i.e. from 11:45 directly to -11:15)
-          bool offsetWrapAround = false;
-          if (newOffset > 43200)
-          { // we just "passed" +12 hours -> set to -12 hours
-            newOffset = -43200;
-            offsetWrapAround = true;
-          }
-          if (newOffset < -43200 && !offsetWrapAround)
-          { // we just passed -12 hours -> set to +12 hours
-            newOffset = 43200;
-          }
-
-          uclock.setTimeZoneOffset(newOffset); // set the new offset
-          uclock.loop();                       // update the clock time and redraw the changed digits -> will "flicker" the menu for a short time, but without, menu is not redrawn correctly
-#ifdef DIMMING
-          checkDimmingNeeded(); // check if we need dimming for the night, because timezone was changed
-#endif
-          currOffset = uclock.getTimeZoneOffset(); // get the new offset as current offset for the menu
-        }
-        setupMenu();
-        tfts.println("UTC Offset");
-        tfts.println(" +/- Hour");
-        char offsetStr[11];
-        int8_t offset_hour = currOffset / 3600;
-        int8_t offset_min = (currOffset % 3600) / 60;
-        if (offset_min <= 0 && offset_hour <= 0)
-        { // negative timezone value -> Make them positive and print a minus in front
-          offset_min = -offset_min;
-          offset_hour = -offset_hour;
-          snprintf(offsetStr, sizeof(offsetStr), "-%d:%02d", offset_hour, offset_min);
-        }
-        else
-        {
-          if (offset_min >= 0 && offset_hour >= 0)
-          { // postive timezone value for hours and minutes -> show a plus in front
-            snprintf(offsetStr, sizeof(offsetStr), "+%d:%02d", offset_hour, offset_min);
-          }
-        }
-        if (offset_min == 0 && offset_hour == 0)
-        { // we don't want a sign in front of the 0:00 case
-          snprintf(offsetStr, sizeof(offsetStr), "%d:%02d", offset_hour, offset_min);
-        }
-        tfts.println(offsetStr);
-      } // END UTC Offset, hours
-      // BEGIN UTC Offset, 15 minutes
-      else if (menu_state == Menu::utc_offset_15m)
-      {
-        time_t currOffset = uclock.getTimeZoneOffset();
-
-        if (menu_change != 0)
-        {
-          time_t newOffsetAdjustmentValue = menu_change * 900; // calculate the new offset
-          time_t newOffset = currOffset + newOffsetAdjustmentValue;
-
-          // check if the new offset is within the allowed range of -12 to +12 hours
-          // same behaviour as for the +/-1 hour offset, but with 15 minutes steps
-          bool offsetWrapAround = false;
-          if (newOffset > 43200)
-          { // we just "passed" +12 hours -> set to -12 hours
-            newOffset = -43200;
-            offsetWrapAround = true;
-          }
-          if (newOffset < -43200 && !offsetWrapAround)
-          { // we just passed -12 hours -> set to +12 hours
-            newOffset = 43200;
-          }
-
-          uclock.setTimeZoneOffset(newOffset); // set the new offset
-          uclock.loop();                       // update the clock time and redraw the changed digits -> will "flicker" the menu for a short time, but without, menu is not redrawn correctly
-#ifdef DIMMING
-          checkDimmingNeeded(); // check if we need dimming for the night, because timezone was changed
-#endif
-          currOffset = uclock.getTimeZoneOffset(); // get the new offset as current offset for the menu
-        }
-        setupMenu();
-        tfts.println("UTC Offset");
-        tfts.println(" +/- 15m");
-        char offsetStr[11];
-        int8_t offset_hour = currOffset / 3600;
-        int8_t offset_min = (currOffset % 3600) / 60;
-        if (offset_min <= 0 && offset_hour <= 0)
-        { // negative timezone value -> Make them positive and print a minus in front
-          offset_min = -offset_min;
-          offset_hour = -offset_hour;
-          snprintf(offsetStr, sizeof(offsetStr), "-%d:%02d", offset_hour, offset_min);
-        }
-        else
-        {
-          if (offset_min >= 0 && offset_hour >= 0)
-          { // postive timezone value for hours and minutes -> show a plus in front
-            snprintf(offsetStr, sizeof(offsetStr), "+%d:%02d", offset_hour, offset_min);
-          }
-        }
-        if (offset_min == 0 && offset_hour == 0)
-        { // we don't want a sign in front of the 0:00 case so overwrite the string
-          snprintf(offsetStr, sizeof(offsetStr), "%d:%02d", offset_hour, offset_min);
-        }
-        tfts.println(offsetStr);
-      } // END UTC Offset, 15 minutes
-      // select clock face
-      else if (menu_state == Menu::selected_graphic)
-      {
-        if (menu_change != 0)
-        {
-          uclock.adjustClockGraphicsIdx(menu_change);
-
-          if (tfts.current_graphic != uclock.getActiveGraphicIdx())
-          {
-            tfts.current_graphic = uclock.getActiveGraphicIdx();
-            updateClockDisplay(TFTs::force); // Redraw everything
-          }
-        }
-        setupMenu();
-        tfts.println("Selected");
-        tfts.println("graphic:");
-        tfts.printf("    %d\n", uclock.getActiveGraphicIdx());
-      }
-#ifdef WIFI_USE_WPS //  WPS code
-      // connect to WiFi using wps pushbutton mode
-      else if (menu_state == Menu::start_wps)
-      {
-        if (menu_change != 0)
-        { // button was pressed
-          if (menu_change < 0)
-          { // left button
-            Serial.println("WiFi WPS start request");
-            tfts.clear();
-            tfts.fillScreen(TFT_BLACK);
-            tfts.setTextColor(TFT_WHITE, TFT_BLACK);
-            tfts.setCursor(0, 0, 4); // Font 4. 26 pixel high
-            WiFiStartWps();
-          }
-        }
-        setupMenu();
-        tfts.println("Connect to WiFi?");
-        tfts.println("Left=WPS");
-      }
-#endif
-    }
-  } // if (menu.stateChanged())
 
   uint32_t time_in_loop = millis() - millis_at_top;
   if (time_in_loop < 20)
@@ -759,14 +513,6 @@ void loop()
     Serial.println(time_in_loop);
   }
 #endif // DEBUG_OUTPUT
-}
-
-void setupMenu()
-{ // Prepare drawing of the menu texts
-  tfts.chip_select.setHoursTens();
-  tfts.setTextColor(TFT_WHITE, TFT_BLACK);
-  tfts.fillRect(0, 120, 135, 120, TFT_BLACK); // use lower half of the display, fill with black
-  tfts.setCursor(0, 124, 4);                  // use font 4 - 26 pixel high - for the menu text
 }
 
 #ifdef DIMMING
@@ -810,7 +556,7 @@ void checkDimmingNeeded()
     }
     Serial.print("Backlight intensity now: ");
     Serial.println(backlights.getEffectiveIntensity());
-    updateClockDisplay(TFTs::force); // Redraw everything; software dimming will be done here
+    apps.redraw(); // Redraw everything; software dimming will be done here
     hour_old = current_hour;
   }
 }
@@ -1011,14 +757,3 @@ void processGeoLocUpdate()
   Serial.println(" seconds.");
 }
 #endif // GEOLOCATION_ENABLED
-
-void updateClockDisplay(TFTs::show_t show)
-{
-  // Refresh, starting with seconds.
-  tfts.setDigit(SECONDS_ONES, uclock.getSecondsOnes(), show);
-  tfts.setDigit(SECONDS_TENS, uclock.getSecondsTens(), show);
-  tfts.setDigit(MINUTES_ONES, uclock.getMinutesOnes(), show);
-  tfts.setDigit(MINUTES_TENS, uclock.getMinutesTens(), show);
-  tfts.setDigit(HOURS_ONES, uclock.getHoursOnes(), show);
-  tfts.setDigit(HOURS_TENS, uclock.getHoursTens(), show);
-}

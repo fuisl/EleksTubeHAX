@@ -65,8 +65,33 @@ uint8_t Backlights::getEffectiveIntensity()
   return dimming ? (uint8_t)BACKLIGHT_DIMMED_INTENSITY : config->intensity;
 }
 
+void Backlights::setOverride(uint8_t led, uint32_t color)
+{
+  if (led < NUM_BACKLIGHT_LEDS)
+    override_colors[led] = color;
+  override_active = true;
+}
+
+void Backlights::releaseOverride()
+{
+  if (!override_active)
+    return;
+  override_active = false;
+  pattern_needs_init = true;
+}
+
 void Backlights::loop()
 {
+  if (override_active && !off)
+  {
+    setBrightness(0xFF >> max_intensity - getEffectiveIntensity() - 1);
+    for (uint8_t i = 0; i < NUM_BACKLIGHT_LEDS; i++)
+      setPixelColor(i, override_colors[i]);
+    show();
+    pattern_needs_init = true; // Re-initialize the configured pattern once the override is released
+    return;
+  }
+
   //   enum patterns { dark, test, constant, rainbow, pulse, breath, num_patterns };
   if (off || config->pattern == dark)
   {

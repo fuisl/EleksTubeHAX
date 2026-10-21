@@ -30,6 +30,13 @@ public:
   uint8_t dimming = 255; // amount of dimming graphics
   uint8_t current_graphic = 1;
 
+  // Which digit changes fastest and in which direction, so its next image can be pre-loaded
+  // in idle time (clock: seconds counting up; countdown: seconds counting down).
+  uint8_t preload_position = SECONDS_ONES;
+  int8_t preload_step = 1;
+  // Draw the "NO WiFi" / "NO MQTT" warnings on the seconds digits (clock mode only).
+  bool show_status_overlays = true;
+
   void begin();
   void reinit();
   void clear();

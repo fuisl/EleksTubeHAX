@@ -96,6 +96,9 @@ private:
  * A simple helper class to call common functions on all buttons at once.
  */
 
+#define BUTTON_HOLD_MS 600       // Press time for a "hold" (Button long press)
+#define BUTTON_LONG_HOLD_MS 2000 // Press time for a "long hold" (see Input.h)
+
 #ifndef BUTTON_ACTIVE_LEVEL
 #define BUTTON_ACTIVE_LEVEL LOW // default: active LOW for hardware buttons with pull-up
 #endif
@@ -104,7 +107,7 @@ private:
 class Buttons
 {
 public:
-  Buttons() : left(BUTTON_LEFT_PIN, BUTTON_ACTIVE_LEVEL), mode(BUTTON_MODE_PIN, BUTTON_ACTIVE_LEVEL), right(BUTTON_RIGHT_PIN, BUTTON_ACTIVE_LEVEL), power(BUTTON_POWER_PIN, BUTTON_ACTIVE_LEVEL) {}
+  Buttons() : left(BUTTON_LEFT_PIN, BUTTON_ACTIVE_LEVEL, BUTTON_HOLD_MS), mode(BUTTON_MODE_PIN, BUTTON_ACTIVE_LEVEL, BUTTON_HOLD_MS), right(BUTTON_RIGHT_PIN, BUTTON_ACTIVE_LEVEL, BUTTON_HOLD_MS), power(BUTTON_POWER_PIN, BUTTON_ACTIVE_LEVEL, BUTTON_HOLD_MS) {}
 
   void begin();
   void loop();

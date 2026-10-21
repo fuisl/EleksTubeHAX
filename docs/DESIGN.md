@@ -71,11 +71,16 @@ Modes cycle in this order: **Clock → Claude → Countdown → Music → Clock*
 | Mode | LEFT tap | RIGHT tap | LEFT hold | RIGHT hold |
 |---|---|---|---|---|
 | Clock | previous clock face | next clock face | — | — |
-| Countdown (stopped) | −1 min (auto-repeat, accelerating) | +1 min | reset | start |
-| Countdown (running) | — | — | reset | pause / resume |
+| Countdown (stopped) | − time | + time | clear to 00:00 | start |
+| Countdown (running / paused) | — | — | reset to the set time | pause / resume |
+| Countdown (alarm at zero) | dismiss | dismiss | dismiss | dismiss |
 | Claude | previous page | next page | — | pin page (disable auto-switch) |
 | Music | previous track | next track | — | play / pause |
 | Settings menu | value − | value + | — | — |
+
+In settings, MODE tap moves to the next item and POWER tap leaves (instead of their global meaning). Countdown time steps: 1 min up to 10, 5 min up to 60, then 10 min (max 99). Taps rather than auto-repeat, because hold is taken by start/reset.
+
+For testing without touching the clock, the same gestures can be sent over the USB serial port: `l m r p` = tap, `L M R P` = hold, `S` = MODE long hold.
 
 ## Mode designs
 
@@ -84,9 +89,10 @@ Existing behaviour, ported into the mode framework: HH:MM:SS nixie, 12/24 h, nig
 
 ### Countdown — "Oppenheimer"
 - Layout `MM SS cc` (minutes, seconds, hundredths), max 99:59.99.
-- Minutes and seconds are crisp nixie images; the two hundredths tubes redraw as fast as the bus allows (target ≥ 30 fps) using a motion-blurred/streaked digit rendered from code rather than loaded from flash.
-- Tension: in the last 10 s the backlights pulse faster and shift orange → red; at zero all tubes flash `00 00 00`, backlights strobe, and an MQTT `countdown/done` event is published.
-- Backlights show progress while the countdown runs in the background of another mode.
+- Minutes and seconds are full-resolution nixie images. While running, the two hundredths tubes use `FastDigits`: the 10 digits of the face cached in RAM at half resolution (8-bit palette indices, ~87 KB, built in ~0.35 s, freed when the countdown stops or is left), pixel-doubled while pushing. Measured: **~40 fps** on the hundredths ones tube.
+- Why: a nixie image from LittleFS costs ~41 ms to decode plus ~14 ms to push (issue #10), far too slow for 100 changes per second; at that rate the lost detail is invisible.
+- Tension: in the last 10 s the backlights pulse faster and shift orange → red; at zero all tubes flash `00 00 00` and the backlights strobe red for 10 s (any button dismisses). *Planned:* an MQTT `countdown` event.
+- Runs in the background of other modes with a draining backlight progress bar (breathing while paused), and pops up when it reaches zero.
 
 ### Claude
 Pages (LEFT/RIGHT):
