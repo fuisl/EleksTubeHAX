@@ -5,7 +5,7 @@ description = "Custom firmware for EleksTube IPS clocks and clones (PlatformIO t
 requires-python = ">=3.10"
 dependencies = [
     "platformio>=6.1",
-    "pillow>=10.0",  # tools/conv-bmp-to-clk.py, scripts/script_prepare_mini_clockfaces.py
+    "pillow>=10.0",  # tools/conv-bmp-to-clk.py
 ]
 
 [tool.uv]

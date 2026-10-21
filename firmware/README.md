@@ -1,10 +1,12 @@
 # EleksTubeHAX - An aftermarket custom firmware for the desk clock
 
-## 1. Pre-built firmware files
+This fork targets only the **EleksTube IPS Pro / Gen2** hardware (ESP32 Pico D4, 4MB flash).
 
-In this folder you can find pre-built firmware image files that you can directly upload/flash to your clock.
+## 1. Pre-built firmware file
 
-These binaries may have limited functionality compared to a self-built firmware, because not all available features are enabled or can be configured.
+In this folder you can find a pre-built firmware image file that you can directly upload/flash to your clock.
+
+This binary may have limited functionality compared to a self-built firmware, because not all available features are enabled or can be configured.
 
 The image files (clock faces) are fixed and can't be changed without building your own firmware file with the development tools (see README.md)!
 
@@ -20,13 +22,10 @@ Disabled:
 
 - MQTT disabled - no 'remote control'. Because of this, also no Home Assistant support!
 - Debug Outputs via serial interface is disabled
-- For IPSTube clock:
-  - LED stripe disabled
-  - Hardware dimming enabled
 
 General:
 
-- 6 different sets of clock faces present. See [data](https://github.com/aly-fly/EleksTubeHAX/tree/main/data).
+- 6 different sets of clock faces present. See [data](../data).
 - BMP mode active for the given clock faces
 - CORE_DEBUG_LEVEL=0 - No ESP32 core messages via serial interface.
 
@@ -34,65 +33,36 @@ General:
 
 **Always backup YOUR clock firmware version as first step!**
 
-Save your original firmware using the script that matches your device (`_ESP32 save flash 4MB.cmd`, `_ESP32 save flash 8MB.cmd` for the IPSTube, or `_ESP32 save flash 16MB.cmd` for the MarvelTubes) by changing the COM port to the number your clock uses.
+On Windows, save your original firmware using `_ESP32 save flash 4MB.cmd` after changing the COM port to the number your clock uses.
+
+On macOS/Linux, use the esptool bundled with PlatformIO:
+
+`uv run python ~/.platformio/packages/tool-esptoolpy/esptool.py --port /dev/cu.usbserial-XXXX --baud 460800 read_flash 0 0x400000 backup1.bin`
 
 Rename and store the `backup1.bin` on a save location.
 
 See also the section "Backup first" and following in the `README.md` file in the root.
 
-## 3. Available image files
-
-In this folder you will find the flashable files.
-They are updated from time to time in the repository, so version number may vary.
-
-The newest pre-built firmware files are published as **GitHub Releases** and can be downloaded directly from the [Releases page](https://github.com/aly-fly/EleksTubeHAX/releases).
-
-Last Update: 2026-06-07 to Version 1.3.12
+## 3. Available image file
 
 | clock model | firmware image file |
 | -- | -- |
-| EleksTube IPS - Orginal Version | `FW_EleksTube_v1.3.12.bin` |
-| EleksTube IPS - Gen2 models | `FW_EleksTube_Gen2_v1.3.12.bin` |
-| SI HAI IPS | `FW_SI_HAI_v1.3.12.bin` |
-| Xunfeng IPS | `FW_Xunfeng_v1.3.12.bin` |
-| NovelLife SE version | `FW_NovelLife_v1.3.12.bin` |
-| PunkCyber/RGB Glow Tube DIY | `FW_PunkCyber_v1.3.12.bin` |
-| IPSTUBE - Model H401 and H402| `FW_IPSTube_v1.3.12.bin` |
-| MarvelTubes | `FW_MarvelTubes_v1.3.12.bin` |
-| MarvelTubes Gen2 | `FW_MarvelTubes_Gen2_v1.3.12.bin` |
-| MarvelTubes Mini | `FW_MarvelTubesMini_v1.3.12.bin` |
-| D-Esign Clock | `FW_DEsign_v1.3.12.bin` |
-
-Note: All "Original" EleksTube clocks, sold after July 2022 are "Gen2" versions. See [Note on EleksTube website](https://elekstube.com/blogs/news/instructions-on-elekstube-clock-for-gen2-systems). But always check the PCB version of your clock!
+| EleksTube IPS - Gen2 models (Classic Edition/Pro/PR1/PR2) | `FW_EleksTube_Gen2_v1.3.13.bin` |
 
 ## 4. Write the EleksTubeHAX firmware file
 
-- Choose the right pre-built firmware file for your clock.
 - Edit the file `_ESP32 write flash.cmd` with an editor.
 - Write the correct COM port of your clock.
-- Write the correct firmware file name for your clock.
+- Write the correct firmware file name.
 - Run the CMD file.
 
 The CMD file should look like this:
 
-`esptool --port COM5 --baud 921600 write_flash --erase-all 0x0000 FW_EleksTube_v1.3.12.bin`
+`esptool --port COM5 --baud 921600 write_flash --erase-all 0x0000 FW_EleksTube_Gen2_v1.3.13.bin`
 
-Note: Most clocks will go into to the "download mode" automatically when esptool is trying to write to it.
-Some clocks needs a button pressed while the powering phase (plugging the USB cable) to enter this mode, like the IPSTUBE ones.
+Note: The clock will go into the "download mode" automatically when esptool is trying to write to it.
 
-**Note for Xunfeng and MarvelTubes**: These use an ESP32-S2 chip. If auto-detection fails, add `--chip esp32s2` to the esptool command.
-
-**Note for MarvelTubes Mini**: Uses an ESP32-C3 with built-in USB Serial/JTAG — no CH340 driver needed. If auto-detection fails, add `--chip esp32c3`.
-
-## 5. Download the newest firmware files
-
-The newest pre-built firmware files are published as **GitHub Releases** and can be downloaded directly from the [Releases page](https://github.com/aly-fly/EleksTubeHAX/releases).
-
-Each release contains all firmware binaries for all supported hardware variants. Download the `FW_*.bin` file that matches your clock model.
-
-The downloaded firmware file can be flashed to the clock by modifying the existing CMD file or using esptool directly (see section 4).
-
-## 6. There is no warranty of any type
+## 5. There is no warranty of any type
 
 Use at your own risk!
 
