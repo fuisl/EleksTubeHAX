@@ -7,18 +7,11 @@ static const uint32_t LAST_MINUTE_MS = 60000;   // Below this: 00 SS cc instead 
 static const uint32_t CACHE_AHEAD_MS = 65000;   // Build the hundredths cache (~0.35 s) while digits still change once a second
 static const int32_t MAX_MINUTES = 24 * 60;
 static const uint32_t FINAL_SECONDS_MS = 10000; // Backlight tension phase before zero
-static const uint32_t COLOR_ORANGE = 0xFF6E00;  // Same as the stock backlight color
-static const uint32_t COLOR_RED = 0xFF0000;
 
 static uint32_t scaleColor(uint32_t color, float f)
 {
   uint8_t r = ((color >> 16) & 0xFF) * f, g = ((color >> 8) & 0xFF) * f, b = (color & 0xFF) * f;
   return (uint32_t(r) << 16) | (uint32_t(g) << 8) | b;
-}
-
-static uint32_t mixColor(uint32_t a, uint32_t b, float t)
-{
-  return scaleColor(a, 1.0f - t) + scaleColor(b, t); // Channels can't overflow: weights sum to 1
 }
 
 uint32_t CountdownApp::remaining()
@@ -45,14 +38,49 @@ void CountdownApp::setState(State new_state)
     remaining_ms = 0;
   }
   state = new_state;
-  Serial.printf("Countdown: %s, %lu ms left\n",
-                state == running ? "running" : state == paused ? "paused" : state == stopped ? "stopped" : "done",
-                remaining());
+  Serial.printf("Countdown: %s, %lu ms left\n", stateName(), remaining());
   blink_shown = -1;
   if (state != running)
     releaseResources(); // Hundredths go back to full-resolution images
   if (apps.isActive(this) && apps.displaysOn() && state != done && state != running)
     drawAll(true);
+}
+
+const char *CountdownApp::stateName()
+{
+  return state == running ? "running" : state == paused ? "paused" : state == stopped ? "stopped" : "done";
+}
+
+void CountdownApp::setDuration(uint32_t duration_ms)
+{
+  set_ms = min(duration_ms, uint32_t(MAX_MINUTES) * 60000);
+  setState(stopped);
+}
+
+void CountdownApp::start(uint32_t duration_ms)
+{
+  setDuration(duration_ms);
+  if (set_ms == 0)
+    return;
+  setState(running);
+  apps.switchTo(this);
+}
+
+void CountdownApp::pause()
+{
+  if (state == running)
+    setState(paused);
+}
+
+void CountdownApp::resume()
+{
+  if (state == paused || (state == stopped && remaining_ms > 0))
+    setState(running);
+}
+
+void CountdownApp::reset()
+{
+  setState(stopped);
 }
 
 void CountdownApp::adjustMinutes(int8_t direction)
@@ -206,22 +234,21 @@ void CountdownApp::updateBacklights()
   }
 
   uint32_t now = millis();
+  uint32_t color = backlights.getColor(); // The clock's own (calibrated) backlight color
   if (state == done)
   {
-    uint32_t c = (now / 125) % 2 ? COLOR_RED : 0; // 4 Hz strobe
+    // Calm alarm: steady clock color; the blinking 00 on the tubes is the signal.
     for (uint8_t led = 0; led < NUM_BACKLIGHT_LEDS; led++)
-      backlights.setOverride(led, c);
+      backlights.setOverride(led, color);
     return;
   }
 
   uint32_t t = remaining();
   if (state == running && t <= FINAL_SECONDS_MS)
   {
-    // Last seconds: all LEDs pulse faster and faster, orange to red.
-    float urgency = 1.0f - float(t) / FINAL_SECONDS_MS;
-    float hz = 1.0f + 5.0f * urgency;
-    float pulse = 0.25f + 0.75f * fabsf(sinf(M_PI * hz * now / 1000.0f));
-    uint32_t c = scaleColor(mixColor(COLOR_ORANGE, COLOR_RED, urgency), pulse);
+    // Last seconds: all LEDs breathe softly in the clock color, one cycle per second, brightest on each second change.
+    float pulse = 0.65f + 0.35f * cosf(2.0f * M_PI * (t % 1000) / 1000.0f);
+    uint32_t c = scaleColor(color, pulse);
     for (uint8_t led = 0; led < NUM_BACKLIGHT_LEDS; led++)
       backlights.setOverride(led, c);
     return;
@@ -233,7 +260,7 @@ void CountdownApp::updateBacklights()
   for (uint8_t p = 0; p < NUM_BACKLIGHT_LEDS; p++) // p = 0 is the leftmost tube (HOURS_TENS)
   {
     float level = constrain(lit - p, 0.0f, 1.0f);
-    backlights.setOverride(HOURS_TENS - p, scaleColor(COLOR_ORANGE, level * breath));
+    backlights.setOverride(HOURS_TENS - p, scaleColor(color, level * breath));
   }
 }
 

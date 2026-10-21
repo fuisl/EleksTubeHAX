@@ -1,7 +1,6 @@
 #include "OTA.h"
 
 #ifdef OTA_ENABLED
-#include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <Update.h>
 #include <WebServer.h>
@@ -15,10 +14,7 @@
 //   e.g. curl -u ota:<pw> -F firmware=@EleksTube_Gen2_v1.3.13.bin http://elekstubeg2-xxxxxx.local/update
 //   (scripts/ota.sh builds and uploads in one go)
 
-extern char UniqueDeviceName[32];
-
-static WebServer server(80);
-static bool otaListening = false;
+static WebServer *server = nullptr; // The clock's web server (HttpServer.cpp)
 static bool uploadAuthenticated = false;
 static String updateError;
 static uint8_t lastPercentShown = 255;
@@ -51,11 +47,11 @@ static void showOtaProgress(uint8_t percent)
 
 static void handleUploadChunk()
 {
-  HTTPUpload &upload = server.upload();
+  HTTPUpload &upload = server->upload();
   if (upload.status == UPLOAD_FILE_START)
   {
     updateError = "";
-    uploadAuthenticated = server.authenticate("ota", OTA_PASSWORD);
+    uploadAuthenticated = server->authenticate("ota", OTA_PASSWORD);
     if (!uploadAuthenticated)
       return;
 
@@ -68,7 +64,7 @@ static void handleUploadChunk()
     tfts.lock();          // Kept until the reboot: the main loop stops drawing
     showOtaScreen(isFirmware ? "Firmware" : "Files");
     // ?size=<bytes> (sent by scripts/ota.sh) gives a correct progress bar and lets Update reject oversized images.
-    size_t size = server.hasArg("size") ? server.arg("size").toInt() : UPDATE_SIZE_UNKNOWN;
+    size_t size = server->hasArg("size") ? server->arg("size").toInt() : UPDATE_SIZE_UNKNOWN;
     if (!Update.begin(size, isFirmware ? U_FLASH : U_SPIFFS))
       updateError = Update.errorString();
   }
@@ -106,38 +102,27 @@ static void handleUploadChunk()
 static void handleUploadDone()
 {
   if (!uploadAuthenticated)
-    return server.requestAuthentication();
+    return server->requestAuthentication();
 
   if (updateError.length())
   {
     Serial.printf("OTA: failed: %s\n", updateError.c_str());
-    server.send(500, "text/plain", "Update failed: " + updateError + "\n");
+    server->send(500, "text/plain", "Update failed: " + updateError + "\n");
   }
   else
   {
     Serial.println("OTA: done, rebooting.");
     showOtaProgress(100);
-    server.send(200, "text/plain", "OK, rebooting\n");
+    server->send(200, "text/plain", "OK, rebooting\n");
   }
   // On failure the running firmware is untouched; a restart is the simplest way to restore the displays.
   delay(1000); // Let the response reach the client before the connection dies with the reboot
   ESP.restart();
 }
 
-void OtaLoop()
+void OtaRegisterRoutes(WebServer &web_server)
 {
-  if (!otaListening)
-  {
-    if (WifiState != connected)
-      return;
-
-    MDNS.begin(UniqueDeviceName); // <UniqueDeviceName>.local
-    MDNS.addService("http", "tcp", 80);
-    server.on("/update", HTTP_POST, handleUploadDone, handleUploadChunk);
-    server.begin();
-    otaListening = true;
-    Serial.printf("OTA: listening on http://%s.local/update\n", UniqueDeviceName);
-  }
-  server.handleClient();
+  server = &web_server;
+  server->on("/update", HTTP_POST, handleUploadDone, handleUploadChunk);
 }
 #endif // OTA_ENABLED

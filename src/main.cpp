@@ -19,6 +19,7 @@
 #include "TFTs.h"
 #include "WiFi_WPS.h"
 #include "NetTask.h"
+#include "Remote.h"
 #include "App.h"
 #include "ClockApp.h"
 #include "CountdownApp.h"
@@ -234,6 +235,7 @@ void setup()
   tfts.fillScreen(TFT_BLACK);
   uclock.loop();
   apps.begin(&clockApp, &settingsApp, modeCycle, sizeof(modeCycle) / sizeof(modeCycle[0])); // Draws the clock
+  RemoteBegin();
   NetTaskBegin(); // From here on WiFi, MQTT, NTP, geolocation and OTA run on core 0
   Serial.println("Starting main loop...");
 }
@@ -465,6 +467,7 @@ void loop()
   buttons.loop();
   uclock.loop();
   apps.loop(buttons); // Button gestures, mode switching, timers and drawing of the active mode
+  RemoteLoop();       // Commands from MQTT / web API, state for the admin page
   backlights.loop();  // After the modes, they may override the LEDs
 
 #ifdef DIMMING

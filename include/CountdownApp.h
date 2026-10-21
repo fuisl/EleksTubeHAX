@@ -12,6 +12,8 @@
  *           done     any button: dismiss
  * It keeps running in the background; the backlights show the remaining time, and the clock
  * switches to the countdown when it reaches zero.
+ *
+ * The public control functions are used by Remote (MQTT, web API, iPhone shortcut); main loop only.
  */
 #include "App.h"
 #include "FastDigits.h"
@@ -25,6 +27,15 @@ public:
   void loop() override;
   void background() override;
   bool onButton(const ButtonEvent &event) override;
+
+  void start(uint32_t duration_ms); // Set the duration and start right away
+  void setDuration(uint32_t duration_ms); // Stops a running countdown
+  void pause();
+  void resume();
+  void reset(); // Back to the set duration, stopped
+  const char *stateName();
+  uint32_t durationMs() { return set_ms; }
+  uint32_t remaining();
 
 private:
   enum State
@@ -46,7 +57,6 @@ private:
   uint32_t frames_since = 0;
   FastDigits fast;
 
-  uint32_t remaining();
   void setState(State new_state);
   void adjustMinutes(int8_t direction);
   void drawAll(bool force);

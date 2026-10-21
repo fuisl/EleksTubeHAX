@@ -91,7 +91,8 @@ Existing behaviour, ported into the mode framework: HH:MM:SS nixie, 12/24 h, nig
 - Layout `HH MM SS` (up to 24 h, rounded up like a kitchen timer); in the **last minute** it switches to `00 SS cc` (seconds and hundredths).
 - Outside the last minute the tubes change once per second, exactly like the clock. In the last minute the two hundredths tubes use `FastDigits`: the 10 digits of the face cached in RAM at half resolution (8-bit palette indices, ~87 KB, built ~0.35 s at 1:05 so the switch is seamless, freed when the countdown stops or is left), pixel-doubled while pushing. Measured: **~40 fps** on the hundredths ones tube.
 - Why: a nixie image from LittleFS costs ~41 ms to decode plus ~14 ms to push (issue #10), far too slow for 100 changes per second; at that rate the lost detail is invisible.
-- Tension: in the last 10 s the backlights pulse faster and shift orange → red; at zero all tubes flash `00 00 00` and the backlights strobe red for 10 s (any button dismisses). *Planned:* an MQTT `countdown` event.
+- Last 10 s: the backlights breathe softly in the clock's own backlight color, one cycle per second, brightest on each second change. At zero the tubes blink `00 00 00` for 10 s over a steady backlight in that color (any button dismisses). Red and fast strobing were dropped: too harsh to look at on a desk.
+- Remote start/pause/reset over MQTT and HTTP (see below); an iPhone Shortcut starts the phone timer and the clock countdown together.
 - Runs in the background of other modes with a draining backlight progress bar (breathing while paused), and pops up when it reaches zero.
 
 ### Claude
@@ -122,17 +123,45 @@ Prefix: `tubehax/`. JSON payloads, UTF-8. Timestamps are Unix epoch seconds (flo
 | `tubehax/music/now` | bridge → clock | yes | `{"playing","title","artist","position","duration","sampled_at","rate"}` |
 | `tubehax/mac/focus` | bridge → clock | no | `{"app","is_claude_terminal"}` |
 | `tubehax/music/cmd` | clock → bridge | no | `"next" \| "prev" \| "toggle"` |
-| `tubehax/clock/<id>/status` | clock → broker | yes (LWT `offline`) | `{"online","mode","ip","rssi","fw"}` |
-| `tubehax/clock/<id>/countdown` | clock → broker | no | `{"event":"started\|paused\|done","remaining"}` |
-| `tubehax/clock/<id>/cmd` | any → clock | no | `{"mode":"clock\|claude\|countdown\|music"}`, `{"countdown":{"set":300,"start":true}}` |
+| `tubehax/clock/<id>/state` | clock → broker | yes | see [clock contract](#mqtt-contract-v1-clock) |
+| `tubehax/clock/<id>/cmd` | any → clock | no | see [clock contract](#mqtt-contract-v1-clock) |
+| `elekstubehax/<id>/status` | clock → broker | yes (LWT) | `online` / `offline` (Home Assistant availability topic, reused) |
 
 `<id>` is the existing `elekstubeg2-XXYYZZ` (last 3 MAC bytes).
+
+## MQTT contract v1 (clock)
+
+Implemented in `src/Remote.cpp`. The same JSON commands are accepted by the clock's HTTP API (`POST /api/cmd`).
+
+**Command** → `tubehax/clock/<id>/cmd` (all fields optional, combinable):
+
+```json
+{"mode": "clock|countdown",
+ "countdown": {"start": 1500, "set": 300, "action": "start|pause|resume|toggle|reset"},
+ "displays": true, "backlights": false}
+```
+
+`start` sets the duration in seconds and starts right away (and shows the countdown); `set` only sets it (stopped); `toggle` starts, pauses or resumes. Unknown modes or actions are rejected (HTTP 400, logged on serial for MQTT).
+
+**State** ← `tubehax/clock/<id>/state`, retained, published on every change and every 30 s:
+
+```json
+{"v": 1, "mode": "countdown", "displays": true, "backlights": true,
+ "countdown": {"state": "stopped|running|paused|done", "set": 1500, "remaining": 1234.56, "ends_at": 1792582495},
+ "ip": "192.168.1.2", "rssi": -48, "ch": 1, "fw": "1.3.13", "uptime": 3600, "heap": 150000}
+```
+
+`remaining` is exact when the message is received live; `ends_at` (UTC epoch, only while running) is for retained copies read later. Clients extrapolate between messages.
+
+**HTTP shortcuts** (for iOS Shortcuts and curl): `GET /api/state`, `GET /api/countdown?minutes=|seconds=|action=`, `GET /api/mode?name=`.
 
 ## Connectivity requirements
 
 - **Done:** all networking (WiFi reconnect, MQTT, NTP queries, geolocation, OTA server) runs in its own FreeRTOS task on core 0 (`NetTask`); the main loop on core 1 only handles buttons, modes, displays and backlights, so network trouble can't freeze the tubes. Verified by stopping the broker for 60 s during a countdown: no stalls, 40 fps, automatic reconnect. A display mutex lets the OTA progress screen take over the tubes.
 - "NO WiFi" / "NO MQTT" warnings appear only after a link has been down for over a minute.
-- To do: exponential backoff (1 s → 60 s cap, jitter) for MQTT reconnects.
+- Done: MQTT reconnects back off exponentially (1 s doubling to 60 s, plus up to 25 % jitter).
+- Not split into more tasks: a second network task's stack (~9 KB of heap) made the countdown's hundredths cache land in a heap layout where drawing fell from 40 to 1 fps. Heap is tight (~150 KB free, ~60 KB during the last minute); measure fps after any change that grows RAM use.
+- The clock's 2.4 GHz link loses 10–80 % of pings while other hosts on the LAN are clean (RSSI −48 dBm, channel 1, modem sleep off). Not fixed by lower TX power. Everything tolerates it; commands may arrive a few seconds late.
 - LWT + retained `status` so the broker and the bridge know when the clock is offline.
 - Re-subscribe on every reconnect; retained topics restore the state.
 - Broker host/port/credentials changeable at runtime (stored in NVS) without reflashing; optional mDNS lookup of the homelab broker.

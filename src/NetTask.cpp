@@ -1,7 +1,8 @@
 #include "NetTask.h"
 #include "GLOBAL_DEFINES.h"
 #include "Clock.h"
-#include "OTA.h"
+#include "HttpServer.h"
+#include "Remote.h"
 #include "WiFi_WPS.h"
 
 #if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
@@ -20,9 +21,7 @@ static void netTask(void *)
   for (;;)
   {
     WifiReconnect();
-#ifdef OTA_ENABLED
-    OtaLoop();
-#endif
+    HttpLoop();
 #if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
     MQTTLoopFrequently();
     if (MQTTReportRequested)
@@ -30,9 +29,10 @@ static void netTask(void *)
       MQTTReportRequested = false;
       MQTTReportBackEverything(true);
     }
+    MQTTPublishRemoteState();
     MQTTLoopInFreeTime();
 #endif
-    uclock.ntpLoop();
+    uclock.ntpLoop(); // Can wait ~1 s for an answer; a separate task for it costs heap the countdown needs
 #ifdef GEOLOCATION_ENABLED
     checkUpdateGeoLocNeeded();
     processGeoLocUpdate();

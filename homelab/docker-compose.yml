@@ -6,10 +6,11 @@ services:
     restart: unless-stopped
     ports:
       - "1883:1883"   # MQTT (clock, Mac bridge)
-      - "9001:9001"   # MQTT over WebSockets (browser admin page)
+      - "9001:9001"   # Admin page (http://fuisl:9001/) + MQTT over WebSockets
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./web:/mosquitto/www:ro
       - mosquitto-data:/mosquitto/data
     deploy:
       resources:

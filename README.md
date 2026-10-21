@@ -34,7 +34,9 @@ For detailed pictures see the `docs/Hardware EleksTube Gen2` subdirectory.
 
 * Show the actual time on the LCDs of the clock with the selected clock face
 
-* Modes, switched with the MODE button: **Clock** and **Countdown** (`HH MM SS` up to 24 h; in the last minute "Oppenheimer" style `00 SS cc` with the hundredths racing at ~40 fps; backlight progress bar, alarm at zero; keeps running in the background). Claude and Music modes are planned, see [docs/DESIGN.md](docs/DESIGN.md).
+* Modes, switched with the MODE button: **Clock** and **Countdown** (`HH MM SS` up to 24 h; in the last minute "Oppenheimer" style `00 SS cc` with the hundredths racing at ~40 fps; backlight progress bar in the clock's backlight color that breathes softly in the last 10 s; at zero the tubes blink `00` over a steady backlight; keeps running in the background). Claude and Music modes are planned, see [docs/DESIGN.md](docs/DESIGN.md).
+
+* Remote control: admin page on the homelab (`http://fuisl:9001/`), MQTT commands, and an HTTP API on the clock that an iPhone Shortcut uses to start the phone's timer and the clock's countdown together. See [3.0 Admin page, iPhone timer and API](#30-admin-page-iphone-timer-and-api).
 
 * Buttons: MODE tap = next mode, hold = back to the clock, long hold (2 s) = settings menu. POWER tap = displays and backlights on/off, hold = backlights only. LEFT/RIGHT depend on the mode (countdown: tap to set the time, hold RIGHT to start/pause, hold LEFT to reset). Full map in [docs/DESIGN.md](docs/DESIGN.md#modes-and-button-map).
 
@@ -51,6 +53,25 @@ For detailed pictures see the `docs/Hardware EleksTube Gen2` subdirectory.
 * Automatic time zone and Daylight Saving adjustment using IP-based geolocation APIs (supports multiple providers)
 
 * Optional manual time zone adjustment in 1 h and 15 minute slots (if IP Geolocation is disabled or fails)
+
+### 3.0 Admin page, iPhone timer and API
+
+**Admin page:** <http://fuisl:9001/> (or `http://192.168.1.13:9001/`). Served by the homelab's Mosquitto (`homelab/web/`, deployed with `homelab/deploy.sh`), so it costs no extra container. Sign in as MQTT user `admin`; the password is `TUBEHAX_ADMIN_PASSWORD` in `~/.config/tubehax/broker.env` (copy it with `grep ADMIN_PASSWORD ~/.config/tubehax/broker.env | cut -d= -f2 | pbcopy`). It shows a live countdown, presets, pause/reset, mode switch, displays/backlights, clock status (WiFi, uptime, heap) and the raw MQTT traffic.
+
+**iPhone timer.** iOS doesn't let any app or automation see the Clock app's timers, so the clock can't follow a timer started in the Clock app. Instead, one Shortcut starts both the iPhone timer (with its Dynamic Island / Lock Screen countdown) and the clock's countdown, from a single tap and with no typing:
+
+1. Shortcuts app → **+** → name it `Tube timer`.
+2. Add **Choose from Menu** with your presets, e.g. `5`, `10`, `25`, `45`, `60`.
+3. In each menu case add **Number** with that value (or put one **Number** after the menu that uses *Menu Result*).
+4. Add **Start Timer**: duration = the number, unit **minutes**.
+5. Add **Get Contents of URL**: `http://elekstubeg2-aa4860.local/api/countdown?minutes=` followed by the number variable.
+6. Put it on the **Action Button**, in **Control Center** or as a Lock Screen widget, or say "Hey Siri, Tube timer". Allow "Local Network" access the first time.
+
+A second Shortcut with only **Get Contents of URL** `…/api/countdown?action=reset` stops the clock (cancel the iPhone timer from the Dynamic Island). Starting a countdown with the clock's buttons does not start the phone timer.
+
+**HTTP API on the clock** (LAN, no auth): `GET /api/state`; `GET /api/countdown?minutes=25` | `?seconds=90` | `?action=pause|resume|toggle|reset`; `GET /api/mode?name=clock|countdown`; `POST /api/cmd` with a JSON command (`Content-Type: application/json`).
+
+**MQTT:** commands to `tubehax/clock/<id>/cmd`, state (retained) on `tubehax/clock/<id>/state`, online/offline (LWT) on `elekstubehax/<id>/status`. Payloads are in [docs/DESIGN.md](docs/DESIGN.md#mqtt-contract-v1-clock).
 
 ### 3.2 Other Main Features
 

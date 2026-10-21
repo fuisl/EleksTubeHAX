@@ -98,5 +98,6 @@ bool MQTTStart(bool restart);
 void MQTTLoopFrequently();
 void MQTTLoopInFreeTime();
 void MQTTReportBackEverything(bool force);
+void MQTTPublishRemoteState(); // Remote.h state -> tubehax/clock/<id>/state
 
 #endif /* MQTT_client_H_ */

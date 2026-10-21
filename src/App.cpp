@@ -38,6 +38,18 @@ void AppManager::redraw()
     current->enter();
 }
 
+App *AppManager::byName(const char *name)
+{
+  for (uint8_t i = 0; i < cycle_count; i++)
+    if (strcmp(cycle[i]->name(), name) == 0)
+      return cycle[i];
+  if (home != nullptr && strcmp(home->name(), name) == 0)
+    return home;
+  if (settings != nullptr && strcmp(settings->name(), name) == 0)
+    return settings;
+  return nullptr;
+}
+
 bool AppManager::displaysOn()
 {
   return tfts.isEnabled();

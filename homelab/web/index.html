@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#141413">
+<title>TubeHAX Admin</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23141413'/><rect x='4' y='3' width='8' height='10' rx='2' fill='none' stroke='%23d97757' stroke-width='1.5'/></svg>">
+<style>
+  :root {
+    --bg: #141413; --panel: #1f1e1c; --line: #33312d; --text: #ece9e4; --muted: #8f8a83;
+    --accent: #d97757; --accent-dim: #8a4c38; --ok: #7fb069; --bad: #e0614f;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 var(--mono); }
+  main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  h1 { font-size: 18px; margin: 0; color: var(--accent); letter-spacing: .02em; }
+  h1::before { content: "✻ "; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; font-weight: 500; }
+  .link { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 16px; }
+  .kv span { display: block; font-size: 12px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button, input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent-dim); }
+  button.on, button.primary { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--bg); font-weight: 600; }
+  button:disabled { opacity: .4; cursor: default; }
+  input { width: 100%; }
+  input.num { width: 90px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .timer { font-size: clamp(44px, 14vw, 76px); letter-spacing: .04em; color: var(--accent); text-align: center; margin: 4px 0 2px;
+           font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(217,119,87,.35); }
+  .timer.idle { color: var(--muted); text-shadow: none; }
+  .sub { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .presets button { min-width: 64px; }
+  .hidden { display: none !important; }
+  .error { color: var(--bad); font-size: 13px; min-height: 1.4em; margin-top: 8px; }
+  code, .url { font-family: var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font-size: 13px; word-break: break-all; }
+  code { white-space: nowrap; word-break: normal; display: inline-block; margin: 2px 0; }
+  .url { display: block; padding: 8px 10px; margin: 6px 0; white-space: normal; word-break: break-all; }
+  ol { padding-left: 20px; margin: 8px 0 0; } li { margin: 4px 0; }
+  details summary { cursor: pointer; color: var(--muted); }
+  #log { max-height: 260px; overflow: auto; font-size: 12px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; color: var(--muted); }
+  #log b { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>TubeHAX</h1>
+    <span id="clock-id" class="link"></span>
+    <span class="link"><span id="link-dot" class="dot"></span><span id="link-text">offline</span></span>
+  </header>
+
+  <section id="login">
+    <h2>Sign in</h2>
+    <form id="login-form">
+      <label for="user">MQTT user</label>
+      <input id="user" autocomplete="username" value="admin">
+      <label for="pass">Password</label>
+      <input id="pass" type="password" autocomplete="current-password">
+      <div class="row" style="margin-top:14px"><button class="primary" type="submit">Connect</button></div>
+      <div id="login-error" class="error"></div>
+    </form>
+  </section>
+
+  <div id="app" class="hidden">
+    <section>
+      <h2>Countdown</h2>
+      <div id="timer" class="timer idle">--:--:--</div>
+      <div id="timer-sub" class="sub">waiting for the clock…</div>
+      <div class="row presets" style="justify-content:center">
+        <button data-min="5">5m</button><button data-min="10">10m</button><button data-min="15">15m</button>
+        <button data-min="25">25m</button><button data-min="45">45m</button><button data-min="60">1h</button>
+      </div>
+      <div class="row" style="justify-content:center;margin-top:10px">
+        <input id="custom-min" class="num" type="number" min="0.1" max="1440" step="any" placeholder="min" aria-label="Minutes">
+        <button id="custom-start">Start</button>
+        <button id="toggle">Pause</button>
+        <button id="reset">Reset</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Clock</h2>
+      <div class="row">
+        <button data-mode="clock">Clock</button>
+        <button data-mode="countdown">Countdown</button>
+        <span style="flex:1"></span>
+        <button id="displays">Displays</button>
+        <button id="backlights">Backlights</button>
+      </div>
+      <div class="grid" style="margin-top:16px">
+        <div class="kv"><span>status</span><b id="s-online">–</b></div>
+        <div class="kv"><span>ip</span><b id="s-ip">–</b></div>
+        <div class="kv"><span>wifi</span><b id="s-wifi">–</b></div>
+        <div class="kv"><span>uptime</span><b id="s-uptime">–</b></div>
+        <div class="kv"><span>firmware</span><b id="s-fw">–</b></div>
+        <div class="kv"><span>free heap</span><b id="s-heap">–</b></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>iPhone timer</h2>
+      <div>A Shortcut can start the iPhone timer (Dynamic Island) and this countdown together. Use this URL in
+        <i>Get Contents of URL</i>, with the minutes as the last part:</div>
+      <code id="shortcut-url" class="url">http://&lt;clock&gt;.local/api/countdown?minutes=25</code>
+      <div style="color:var(--muted);font-size:13px">Other actions: <code>?action=pause</code> <code>?action=resume</code> <code>?action=toggle</code> <code>?action=reset</code>. Steps in the README.</div>
+    </section>
+
+    <section>
+      <details>
+        <summary>Live MQTT (tubehax/#)</summary>
+        <div id="log"></div>
+      </details>
+      <div class="row" style="margin-top:12px"><button id="logout">Sign out</button></div>
+    </section>
+  </div>
+</main>
+
+<script src="vendor/mqtt.min.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const store = { // sessionStorage can throw (private mode, blocked storage)
+    get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
+    del(k) { try { sessionStorage.removeItem(k); } catch {} },
+  };
+
+  let client = null, clockId = null, state = null, online = null;
+  let base = null; // {remaining, at}: countdown extrapolation base (performance.now() ms)
+
+  function connect(user, pass) {
+    $('login-error').textContent = '';
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/mqtt`;
+    client = mqtt.connect(url, { username: user, password: pass, reconnectPeriod: 2000, connectTimeout: 8000,
+                                 clientId: 'admin-web-' + Math.random().toString(16).slice(2, 8) });
+    client.on('connect', () => {
+      store.set('tubehax-user', user); store.set('tubehax-pass', pass);
+      $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+      setLink(true);
+      client.subscribe(['tubehax/#', 'elekstubehax/+/status']);
+    });
+    client.on('close', () => setLink(false));
+    client.on('error', (err) => {
+      const auth = /auth|Not authorized|Bad user/i.test(err.message);
+      $('login-error').textContent = auth ? 'Wrong user or password.' : err.message;
+      if (auth) { client.end(true); showLogin(); }
+    });
+    client.on('message', onMessage);
+  }
+
+  function showLogin() {
+    store.del('tubehax-pass');
+    $('app').classList.add('hidden'); $('login').classList.remove('hidden');
+  }
+
+  function setLink(up) {
+    $('link-dot').className = 'dot ' + (up ? 'ok' : 'bad');
+    $('link-text').textContent = up ? 'broker' : 'reconnecting';
+  }
+
+  function onMessage(topic, payload, packet) {
+    const text = payload.toString();
+    logLine(topic, text, packet.retain);
+    let m;
+    if ((m = topic.match(/^tubehax\/clock\/([^/]+)\/state$/))) {
+      if (clockId && clockId !== m[1]) return; // One clock per page; the first one seen wins
+      clockId = m[1];
+      try { state = JSON.parse(text); } catch { return; }
+      const cd = state.countdown || {};
+      // Live messages: "remaining" is fresh. Retained ones may be old: use the absolute end time.
+      const left = packet.retain && cd.ends_at ? cd.ends_at - Date.now() / 1000 : cd.remaining;
+      base = { remaining: Math.max(0, left || 0), at: performance.now() };
+      render();
+    } else if ((m = topic.match(/^elekstubehax\/([^/]+)\/status$/))) {
+      if (!clockId || clockId === m[1]) { online = text === 'online'; render(); }
+    }
+  }
+
+  function send(cmd) {
+    if (!client || !clockId) return;
+    client.publish(`tubehax/clock/${clockId}/cmd`, JSON.stringify(cmd));
+  }
+
+  function fmtTimer(sec, running) {
+    const p = (n) => String(Math.floor(n)).padStart(2, '0');
+    if (sec < 60 && running) return `00:${p(sec)}.${p((sec * 100) % 100)}`;
+    const s = Math.ceil(sec);
+    return `${p(s / 3600)}:${p((s / 60) % 60)}:${p(s % 60)}`;
+  }
+
+  function fmtUptime(s) {
+    const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
+    return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
+  }
+
+  function currentRemaining() {
+    if (!state || !base) return 0;
+    const running = state.countdown.state === 'running';
+    return Math.max(0, base.remaining - (running ? (performance.now() - base.at) / 1000 : 0));
+  }
+
+  function render() {
+    if (!state) return;
+    const cd = state.countdown;
+    $('clock-id').textContent = clockId;
+    $('s-online').textContent = online === false ? 'offline' : 'online';
+    $('s-online').style.color = online === false ? 'var(--bad)' : 'var(--ok)';
+    $('s-ip').textContent = state.ip;
+    $('s-wifi').textContent = `${state.rssi} dBm` + (state.ch ? ` · ch ${state.ch}` : '');
+    $('s-uptime').textContent = fmtUptime(state.uptime);
+    $('s-fw').textContent = 'v' + state.fw;
+    $('s-heap').textContent = Math.round(state.heap / 1024) + ' KB';
+    document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === state.mode));
+    $('displays').classList.toggle('on', state.displays);
+    $('backlights').classList.toggle('on', state.backlights);
+    $('toggle').textContent = cd.state === 'running' ? 'Pause' : cd.state === 'paused' ? 'Resume' : 'Start';
+    $('toggle').disabled = cd.state === 'stopped' && !cd.set;
+    $('shortcut-url').textContent = `http://${clockId}.local/api/countdown?minutes=25`;
+    tick();
+  }
+
+  function tick() {
+    if (!state) return;
+    const cd = state.countdown, running = cd.state === 'running';
+    const t = cd.state === 'done' ? 0 : currentRemaining();
+    $('timer').textContent = fmtTimer(t, running);
+    $('timer').classList.toggle('idle', !running && cd.state !== 'paused' && cd.state !== 'done');
+    const ends = new Date(Date.now() + t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    $('timer-sub').textContent = running ? `ends ${ends}` : cd.state === 'paused' ? 'paused'
+      : cd.state === 'done' ? 'done' : `set ${fmtTimer(cd.set, false)}`;
+  }
+  setInterval(tick, 50);
+
+  function logLine(topic, text, retained) {
+    const log = $('log');
+    const line = document.createElement('div');
+    const time = new Date().toLocaleTimeString();
+    line.innerHTML = `${time} <b></b>${retained ? ' (retained)' : ''} `;
+    line.querySelector('b').textContent = topic;
+    line.append(text.length > 400 ? text.slice(0, 400) + '…' : text);
+    log.prepend(line);
+    while (log.childElementCount > 100) log.lastChild.remove();
+  }
+
+  $('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (client) client.end(true);
+    connect($('user').value.trim(), $('pass').value);
+  });
+  $('logout').addEventListener('click', () => { if (client) client.end(true); client = null; showLogin(); });
+  document.querySelectorAll('[data-min]').forEach((b) =>
+    b.addEventListener('click', () => send({ countdown: { start: Number(b.dataset.min) * 60 } })));
+  $('custom-start').addEventListener('click', () => {
+    const m = parseFloat($('custom-min').value);
+    if (m > 0) send({ countdown: { start: Math.round(m * 60) } });
+  });
+  $('toggle').addEventListener('click', () => send({ countdown: { action: 'toggle' } }));
+  $('reset').addEventListener('click', () => send({ countdown: { action: 'reset' } }));
+  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => send({ mode: b.dataset.mode })));
+  $('displays').addEventListener('click', () => state && send({ displays: !state.displays }));
+  $('backlights').addEventListener('click', () => state && send({ backlights: !state.backlights }));
+
+  const savedUser = store.get('tubehax-user'), savedPass = store.get('tubehax-pass');
+  if (savedUser) $('user').value = savedUser;
+  if (savedUser && savedPass) connect(savedUser, savedPass);
+})();
+</script>
+</body>
+</html>

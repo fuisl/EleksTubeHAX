@@ -33,6 +33,7 @@
 #include <cctype>
 #include "Backlights.h"
 #include "Clock.h"
+#include "Remote.h"
 #include "TFTs.h"
 #ifdef MQTT_USE_TLS // For secure WiFi client
 #include <WiFiClientSecure.h>
@@ -82,6 +83,15 @@ char outbuf[64];
 
 uint32_t lastTimeSent = (uint32_t)(MQTT_REPORT_STATUS_EVERY_SEC * -1000);
 uint32_t LastTimeTriedToConnect = 0;
+uint32_t ReconnectDelayMs = 1000; // Exponential backoff: 1 s doubling to 60 s, plus up to 25 % jitter
+bool remoteStateResend = false;   // Publish the remote state after (re)connecting
+
+// Remote control topics: tubehax/clock/<id>/<suffix> (Remote.h, docs/DESIGN.md)
+const char *remoteTopic(char *buf, size_t size, const char *suffix)
+{
+  snprintf(buf, size, "tubehax/clock/%s/%s", UniqueDeviceName, suffix);
+  return buf;
+}
 
 bool MQTTConnected = false;     // Show connection status on the clock's LCD
 bool discoveryReported = false; // Initial state of discovery messages sent to HA
@@ -451,8 +461,8 @@ bool loadCARootCert()
 bool MQTTStart(bool restart)
 {
   MQTTConnected = false;
-  if (((millis() - LastTimeTriedToConnect) > (MQTT_RECONNECT_WAIT_SEC * 1000)) || (LastTimeTriedToConnect == 0))
-  { // Try to connect to MQTT broker only if the time since last connection attempt is greater than the defined wait time (default 30 sec).
+  if (((millis() - LastTimeTriedToConnect) > ReconnectDelayMs) || (LastTimeTriedToConnect == 0))
+  { // Try to connect to MQTT broker only after the backoff delay since the last failed attempt.
     if (restart)
     {
       Serial.println("MQTT reconnecting...");
@@ -499,12 +509,16 @@ bool MQTTStart(bool restart)
     {
       Serial.println("MQTT connected");
       MQTTConnected = true;
+      ReconnectDelayMs = 1000;
       MQTTReportAvailability(MQTT_ALIVE_MSG_ONLINE); // Publish online status
     }
     else
     {
       Serial.println("MQTT connection failed!");
       LastTimeTriedToConnect = millis();
+      ReconnectDelayMs = min(ReconnectDelayMs * 2, uint32_t(60000));
+      ReconnectDelayMs += random(ReconnectDelayMs / 4); // Jitter: clocks and bridge don't retry in lockstep
+      Serial.printf("MQTT: next attempt in %lu s\n", ReconnectDelayMs / 1000);
       printMQTTconnectionStatus();
       return false; // Do not continue if not connected
     } // Connect failed
@@ -512,6 +526,11 @@ bool MQTTStart(bool restart)
 #ifdef DEBUG_OUTPUT_MQTT
     Serial.println("DEBUG: subscribing to MQTT topics...");
 #endif
+    {
+      char topic[64];
+      MQTTclient.subscribe(remoteTopic(topic, sizeof(topic), "cmd"));
+      remoteStateResend = true;
+    }
 
 #ifdef MQTT_PLAIN_ENABLED
     bool ok = MQTTclient.subscribe(concat7_into(outbuf, UniqueDeviceName, "/directive/#", "", "", "", "", "")); // Subscribes only to messages send to the device
@@ -566,6 +585,15 @@ void checkIfMQTTIsConnected()
 
 void MQTTCallback(char *topic, byte *payload, unsigned int length)
 {
+  char cmd_topic[64];
+  if (strcmp(topic, remoteTopic(cmd_topic, sizeof(cmd_topic), "cmd")) == 0)
+  {
+    String error;
+    if (!RemoteSubmit((const char *)payload, length, error))
+      Serial.printf("Remote: rejected MQTT command: %s\n", error.c_str());
+    return;
+  }
+
 #ifdef DEBUG_OUTPUT_MQTT
   Serial.println("");
   Serial.println("DEBUG: Entering MQTTCallback...");
@@ -837,6 +865,19 @@ void MQTTLoopFrequently()
 {
   MQTTclient.loop();
   checkIfMQTTIsConnected();
+}
+
+void MQTTPublishRemoteState()
+{
+  String json;
+  bool changed = RemoteTakeState(json);
+  if (!MQTTclient.connected() || !(changed || remoteStateResend))
+    return;
+  if (!changed)
+    json = RemoteState();
+  char topic[64];
+  if (MQTTPublish(remoteTopic(topic, sizeof(topic), "state"), json.c_str(), true)) // Retained: the admin page gets it on connect
+    remoteStateResend = false;
 }
 
 void MQTTLoopInFreeTime()

@@ -47,6 +47,7 @@ public:
   void redraw(); // Full redraw of the active app, e.g. after a dimming change.
 
   App *active() { return current; }
+  App *byName(const char *name); // Home, settings or a cycle app; nullptr if unknown
   bool isActive(const App *app) { return current == app; }
 
   void setDisplaysOn(bool on);

@@ -261,8 +261,8 @@ bool TFTs::LoadImageIntoBuffer(uint8_t file_index)
   bmpFS = LittleFS.open(filename, "r");
   if (!bmpFS)
   {
-    Serial.print("File not found: ");
-    Serial.println(filename);
+    Serial.printf("Can't open %s (errno %d, heap free %u largest %u)\n", filename, errno,
+                  ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     return (false);
   }
 

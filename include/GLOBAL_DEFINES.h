@@ -38,7 +38,6 @@
 #endif                                  // CONFIG_ESP32_WIFI_NVS_ENABLED
 
 // ************ MQTT config *********************
-#define MQTT_RECONNECT_WAIT_SEC 30      // How long to wait between retries to connect to broker
 #define MQTT_REPORT_STATUS_EVERY_SEC 15 // How often report status to MQTT Broker
 
 // ************ Backlight config *********************
