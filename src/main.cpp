@@ -19,6 +19,7 @@
 #include "StoredConfig.h"
 #include "TFTs.h"
 #include "WiFi_WPS.h"
+#include "OTA.h"
 
 #ifdef GEOLOCATION_ENABLED
 #include "IPGeolocation_AO.h"
@@ -239,6 +240,9 @@ void loop()
 
   // Do all the maintenance work.
   WifiReconnect(); // If not connected to WiFi, attempt to reconnect
+#ifdef OTA_ENABLED
+  OtaLoop(); // Service over-the-air updates (blocks while an upload is running)
+#endif
 
 #if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
   MQTTLoopFrequently();

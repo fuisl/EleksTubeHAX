@@ -230,10 +230,14 @@ The Python tooling (PlatformIO Core, Pillow for the image tools) is managed with
 uv sync                                  # create .venv with PlatformIO
 cp "include/_USER_DEFINES - empty.h" include/_USER_DEFINES.h   # then edit it
 uv run pio run                           # build (default env: EleksTube_Gen2)
-uv run pio run -t upload                 # flash the app partition
-uv run pio run -t uploadfs               # flash the clock faces (LittleFS)
+uv run pio run -t upload                 # flash the app partition over USB
+uv run pio run -t uploadfs               # flash the clock faces (LittleFS) over USB
 uv run pio device monitor                # serial monitor
+scripts/ota.sh                           # build + upload firmware over WiFi
+scripts/ota.sh filesystem                # build + upload the clock faces over WiFi
 ```
+
+**Over-the-air updates.** With `OTA_ENABLED` in `_USER_DEFINES.h` the clock accepts uploads at `http://<device>.local/update` (HTTP basic auth, user `ota`). `scripts/ota.sh` reads `TUBEHAX_OTA_PASSWORD` (and optionally `TUBEHAX_CLOCK_HOST`) from `~/.config/tubehax/broker.env`. The tubes show an orange progress bar during the update; if an upload fails or the connection drops, the clock reboots into the firmware it was running. USB is only needed for the very first flash of this partition layout (or to restore the backup).
 
 ### 5.1 Download the code
 
@@ -279,16 +283,13 @@ Flash partition size settings are already configured in the following file.
 
 | filename | environment | flash size | app part size | data part size |
 | --- | --- | --- | --- | --- |
-| `partition_4MB.csv` | EleksTube_Gen2 | 4.0 MB | 1.2 MB | 2.8 MB |
+| `partition_4MB_ota.csv` | EleksTube_Gen2 | 4.0 MB | 2 x 1.5 MB (OTA) | 0.9 MB |
 
-
-No OTA partition, one app partition, one data partition as LittleFS to store the images of the clock faces.
+Two app partitions for over-the-air updates (the new firmware is written to the inactive slot), one data partition as LittleFS for the clock face and other assets.
 
 These CSV files are used by PlatformIO to create the partitions on the flash of the ESP32 when uploading.
 
-Upload port is set to 921600 baud in the `platformio.ini` file.
-
-**Note**: If you have upload issues, reduce this to 460800 baud or even lower.
+USB upload speed is set to 460800 baud in the `platformio.ini` file; 921600 baud gives "serial noise" errors on the Pro's CH340 USB-serial chip. If you still have upload issues, reduce it further.
 
 #### 5.3.3 Libraries in use
 
