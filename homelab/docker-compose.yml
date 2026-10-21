@@ -26,6 +26,11 @@ services:
     env_file: feeds.env  # MQTT_USER / MQTT_PASSWORD, created on the homelab only (see README)
     environment:
       MQTT_HOST: mosquitto
+    # Plan limits: the homelab's own Claude Code login, read-only. The folder (not the file) is mounted
+    # so renewals, which replace the file, are seen. Runs as the homelab user to read the 0600 file.
+    user: "1000:1000"
+    volumes:
+      - ${HOME}/.claude:/claude:ro
     deploy:
       resources:
         limits:

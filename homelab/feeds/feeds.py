@@ -5,9 +5,10 @@ JSON documents the ESP32 can parse, and publishes them retained:
 
   tubehax/online/status   overall state, components, active incident, 30-day incident strip
   tubehax/online/release  latest Claude Code version, 14-day release strip, first changelog lines
-  tubehax/online/usage    plan limits (5 hours, 7 days, one model's week), only with CLAUDE_USAGE_TOKEN set:
-                          a long-lived token from `claude setup-token` (homelab/set-usage-token.sh). The usage
-                          endpoint is the one Claude Code's /usage uses; it is undocumented and may change.
+  tubehax/online/usage    plan limits (5 hours, 7 days, Fable weekly), from the endpoint Claude Code's /usage uses
+                          (undocumented, may change). Needs a full claude.ai login (user:profile scope): the
+                          homelab's own Claude Code login, read from ~/.claude/.credentials.json (mounted
+                          read-only). Claude Code renews that login; this service never writes it.
 
 Runs next to Mosquitto on the homelab (docker-compose.yml). Contract: docs/DESIGN.md#mqtt-contract.
 """
@@ -32,7 +33,8 @@ STATUS_EVERY_S = 120
 HISTORY_EVERY_S = 600
 RELEASES_EVERY_S = 900  # GitHub allows 60 unauthenticated requests per hour
 USAGE_EVERY_S = 300
-USAGE_MODEL = "fable"  # The model whose weekly limit gets the third bar
+USAGE_MODEL = "Fable"  # The model whose weekly limit gets the third bar
+CREDENTIALS = os.environ.get("CLAUDE_CREDENTIALS", "/claude/.credentials.json")
 
 # Short names that fit a 135 px wide tube; anything else keeps its first word.
 COMPONENT_NAMES = {
@@ -137,24 +139,39 @@ def release_counts(releases: list[dict], days: int) -> list[int]:
     return counts
 
 
-def build_usage(raw: dict) -> dict:
-    """five_hour / seven_day / seven_day_<model> windows: {"utilization": percent, "resets_at": ISO}."""
+def usage_token() -> str | None:
+    """The homelab Claude Code login's access token, if present and not expired."""
+    try:
+        with open(CREDENTIALS) as f:
+            oauth = json.load(f)["claudeAiOauth"]
+    except (OSError, ValueError, KeyError):
+        return None
+    if oauth.get("expiresAt", 0) / 1000 < time.time() + 60:
+        return None  # Claude Code renews it (see claude-keepalive in docker-compose.yml)
+    return oauth.get("accessToken")
 
-    def window(w: dict | None, name: str | None = None) -> dict | None:
-        if not isinstance(w, dict) or w.get("utilization") is None:
+
+def build_usage(raw: dict) -> dict:
+    """From the "limits" list: session (5 hours), weekly_all (7 days), weekly_scoped per model."""
+
+    def window(limit: dict | None, name: str | None = None) -> dict | None:
+        if not limit or limit.get("percent") is None:
             return None
-        out = {"pct": round(float(w["utilization"]), 1), "resets_at": epoch(w.get("resets_at"))}
+        out = {"pct": float(limit["percent"]), "resets_at": epoch(limit.get("resets_at"))}
         return {"name": name, **out} if name else out
 
-    models = {k[len("seven_day_"):]: v for k, v in raw.items()
-              if k.startswith("seven_day_") and window(v) and "oauth" not in k}
-    key = next((k for k in models if USAGE_MODEL in k), None) or max(
-        models, key=lambda k: models[k]["utilization"], default=None)
+    limits = raw.get("limits") or []
+    by_kind = {l.get("kind"): l for l in limits if l.get("kind") != "weekly_scoped"}
+    scoped = [l for l in limits if l.get("kind") == "weekly_scoped"]
+    model = next((l for l in scoped if USAGE_MODEL.lower() in str(((l.get("scope") or {}).get("model") or {})
+                                                                  .get("display_name", "")).lower()),
+                 scoped[0] if scoped else None)
+    model_name = (((model or {}).get("scope") or {}).get("model") or {}).get("display_name") or USAGE_MODEL
     return {
         "v": 1,
-        "five_hour": window(raw.get("five_hour")),
-        "seven_day": window(raw.get("seven_day")),
-        "model_week": window(models[key], key.split("_")[0].upper()[:9]) if key else None,
+        "five_hour": window(by_kind.get("session")),
+        "seven_day": window(by_kind.get("weekly_all")),
+        "model_week": window(model, model_name.upper()[:9]),
         "fetched_at": int(time.time()),
     }
 
@@ -170,11 +187,7 @@ def main() -> None:
     published: dict[str, tuple[str, float]] = {}  # topic -> (payload without fetched_at, publish time)
     incidents: list[dict] = []
     next_status = next_history = next_release = next_usage = 0.0
-    token = os.environ.get("CLAUDE_USAGE_TOKEN", "").strip()
-    if not token:
-        log.info("usage: no CLAUDE_USAGE_TOKEN, plan limits stay empty")
-        next_usage = float("inf")
-    logged_usage_fields = False
+    usage_waiting_logged = False
 
     def publish(topic: str, payload: dict) -> None:
         text = json.dumps(payload, separators=(",", ":"))
@@ -208,16 +221,19 @@ def main() -> None:
         try:
             if now >= next_usage:
                 next_usage = now + USAGE_EVERY_S
-                raw = fetch(USAGE_URL, {"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"})
-                if not logged_usage_fields:  # Field names only, to adapt if the format changes
-                    log.info("usage fields: %s", {k: sorted(v) if isinstance(v, dict) else type(v).__name__
-                                                  for k, v in raw.items()})
-                    logged_usage_fields = True
-                publish("tubehax/online/usage", build_usage(raw))
+                token = usage_token()
+                if token is None:
+                    if not usage_waiting_logged:
+                        log.info("usage: no valid Claude login in %s yet", CREDENTIALS)
+                        usage_waiting_logged = True
+                    next_usage = now + 60
+                else:
+                    usage_waiting_logged = False
+                    raw = fetch(USAGE_URL, {"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"})
+                    publish("tubehax/online/usage", build_usage(raw))
         except urllib.error.HTTPError as e:
-            log.warning("usage: HTTP %d%s", e.code, " (token rejected: run set-usage-token.sh again)"
-                        if e.code in (401, 403) else "")
-            next_usage = now + (1800 if e.code in (401, 403) else 300)
+            detail = e.read()[:200].decode(errors="replace") if e.code in (401, 403) else ""
+            log.warning("usage: HTTP %d %s", e.code, detail)
         except Exception as e:
             log.warning("usage: %s", e)
         time.sleep(5)
