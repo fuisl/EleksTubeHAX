@@ -19,7 +19,7 @@ HOME = Path.home()
 SOURCE = HOME / ".claude" / ".credentials.json"
 TARGET = HOME / "tubehax" / "secrets" / "claude-usage.json"
 CLAUDE = HOME / ".local" / "bin" / "claude"
-RENEW = [str(CLAUDE), "auth", "status"]
+RENEW = [str(CLAUDE), "-p", "/usage"]  # Renews an expiring login; no model call ("auth status" does not renew)
 RENEW_BEFORE_S = 15 * 60
 
 
@@ -30,7 +30,7 @@ def read_login() -> dict:
 def main() -> None:
     oauth = read_login()
     if oauth["expiresAt"] / 1000 < time.time() + RENEW_BEFORE_S:
-        subprocess.run(RENEW, capture_output=True, timeout=120)
+        subprocess.run(RENEW, capture_output=True, timeout=120, cwd="/tmp")
         oauth = read_login()
     TARGET.parent.mkdir(mode=0o700, exist_ok=True)
     tmp = TARGET.with_suffix(".tmp")
