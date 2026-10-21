@@ -44,3 +44,6 @@ include/_USER_DEFINES.h
 
 # Personal firmware backups (MAC-locked, never commit).
 backups/
+
+# Claude Code agent worktrees.
+.claude/worktrees/
