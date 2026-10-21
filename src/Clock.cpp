@@ -123,6 +123,9 @@ void RtcSet(uint32_t tt)
 
 // Global variables for clock/NTP client
 uint32_t Clock::millis_last_ntp = 0;
+volatile bool Clock::ntp_pending = false;
+volatile time_t Clock::ntp_pending_time = 0;
+volatile uint32_t Clock::ntp_pending_millis = 0;
 WiFiUDP Clock::ntpUDP;
 NTPClient Clock::ntpTimeClient(ntpUDP, NTP_SERVER, 0, NTP_UPDATE_INTERVAL);
 
@@ -170,6 +173,11 @@ void Clock::begin(StoredConfig::Config::Clock *config_)
 
 void Clock::loop()
 {
+  if (ntp_pending)
+  { // Apply the NTP time fetched by the network task, corrected for the time since it arrived.
+    ntp_pending = false;
+    setTime(ntp_pending_time + (millis() - ntp_pending_millis) / 1000);
+  }
   if (timeStatus() == timeNotSet)
   {
     time_valid = false;
@@ -204,66 +212,46 @@ time_t Clock::syncProvider()
   Serial.println(millis_last_ntp == 0);
 #endif
 
-  // check if we need to update from the NTP time
-  if (millis() - millis_last_ntp >= current_ntp_interval_ms || millis_last_ntp == 0) // Adaptive interval timing
-  {                                                                                  // It's time to get a new NTP sync
-    Serial.println("\nTime to update from NTP Server...");
-    if (WifiState == connected)
-    { // We have WiFi, so try to get NTP time.
-      if (ntpTimeClient.update())
-      {
-        Serial.println("NTP update query was successful!");
-        time_t ntp_now = ntpTimeClient.getEpochTime();
-        Serial.print("NTP time = ");
-        Serial.println(ntpTimeClient.getFormattedTime());
-        rtc_now = RtcGet(); // Get the RTC time again, because it may have changed in the meantime
-        // Sync the RTC to NTP if needed.
-        Serial.print("NTP: ");
-        Serial.println(ntp_now);
-        Serial.print("RTC: ");
-        Serial.println(rtc_now);
-        Serial.print("Diff: ");
-        Serial.println(ntp_now - rtc_now);
-
-        if ((ntp_now != rtc_now) && (ntp_now > 1761609600)) // check if we have a difference and a valid NTP time (check for after 1761609600 = 2025-10-28 00:00:01 UTC)
-        {                                                   // NTP time is valid and different from RTC time
-          Serial.println("RTC and NTP time differs more than 1 second, updating RTC time.");
-          RtcSet(ntp_now);
-          Serial.println("RTC is now set to NTP time.");
-          rtc_now = RtcGet(); // Check if RTC time is set correctly
-          Serial.print("RTC time = ");
-          Serial.println(rtc_now);
-        }
-        else if ((ntp_now != rtc_now) && (ntp_now < 1743364444))
-        { // NTP can't be valid!
-          Serial.println("Time returned from NTP is not valid! Using RTC time!");
-          rtc_now = RtcGet(); // Get the RTC time again, because it may have changed in the meantime
-          return rtc_now;
-        }
-        millis_last_ntp = millis(); // Store the last time we tried to get NTP time
-        handleNtpSuccess();         // Update adaptive timing
-
-        Serial.println("Using NTP time!");
-        return ntp_now;
-      }
-      else
-      { // NTP return value is not valid
-        Serial.println("NTP update query was not successful!\nUsing RTC time!");
-        millis_last_ntp = millis(); // store the last attempt time even on failure
-        handleNtpFailure();         // Update adaptive timing
-        rtc_now = RtcGet();         // Get the RTC time
-        return rtc_now;
-      }
-    } // no WiFi!
-    Serial.println("No WiFi!\nUsing RTC time!");
-    millis_last_ntp = millis(); // store the last attempt time even on WiFi failure
-    handleNtpFailure();         // Update adaptive timing for WiFi failures too
-    rtc_now = RtcGet();         // Get the RTC time (if update interval not reached or no WiFi or NTP failure)
-    return rtc_now;
-  }
-  Serial.println("Using RTC time.");
-  rtc_now = RtcGet(); // read RTC time if no NTP update is needed
+  rtc_now = RtcGet();
   return rtc_now;
+}
+
+void Clock::ntpLoop()
+{
+  if (millis() - millis_last_ntp < current_ntp_interval_ms && millis_last_ntp != 0) // Adaptive interval timing
+    return;
+  millis_last_ntp = millis(); // Store the attempt time, also on failure
+
+  if (WifiState != connected)
+  {
+    Serial.println("NTP: no WiFi, keeping RTC time.");
+    handleNtpFailure();
+    return;
+  }
+  Serial.println("\nTime to update from NTP Server...");
+  if (!ntpTimeClient.update())
+  {
+    Serial.println("NTP update query was not successful! Keeping RTC time.");
+    handleNtpFailure();
+    return;
+  }
+  time_t ntp_now = ntpTimeClient.getEpochTime();
+  if (ntp_now < 1761609600) // Before 2025-10-28 00:00:01 UTC can't be valid
+  {
+    Serial.println("Time returned from NTP is not valid! Keeping RTC time.");
+    handleNtpFailure();
+    return;
+  }
+  Serial.printf("NTP time = %s (%ld)\n", ntpTimeClient.getFormattedTime().c_str(), (long)ntp_now);
+  if (ntp_now != RtcGet())
+  {
+    Serial.println("RTC and NTP time differ, updating RTC time.");
+    RtcSet(ntp_now);
+  }
+  ntp_pending_time = ntp_now;
+  ntp_pending_millis = millis();
+  ntp_pending = true; // Applied by loop() on the display core
+  handleNtpSuccess();
 }
 
 uint8_t Clock::getHoursTens()

@@ -78,7 +78,7 @@ Modes cycle in this order: **Clock → Claude → Countdown → Music → Clock*
 | Music | previous track | next track | — | play / pause |
 | Settings menu | value − | value + | — | — |
 
-In settings, MODE tap moves to the next item and POWER tap leaves (instead of their global meaning). Countdown time steps: 1 min up to 10, 5 min up to 60, then 10 min (max 99). Taps rather than auto-repeat, because hold is taken by start/reset.
+In settings, MODE tap moves to the next item and POWER tap leaves (instead of their global meaning). Countdown time steps: 1 min up to 10 min, 5 min up to 1 h, 15 min up to 3 h, then 1 h (max 24 h). Taps rather than auto-repeat, because hold is taken by start/reset.
 
 For testing without touching the clock, the same gestures can be sent over the USB serial port: `l m r p` = tap, `L M R P` = hold, `S` = MODE long hold.
 
@@ -88,8 +88,8 @@ For testing without touching the clock, the same gestures can be sent over the U
 Existing behaviour, ported into the mode framework: HH:MM:SS nixie, 12/24 h, night dimming, NTP + RTC.
 
 ### Countdown — "Oppenheimer"
-- Layout `MM SS cc` (minutes, seconds, hundredths), max 99:59.99.
-- Minutes and seconds are full-resolution nixie images. While running, the two hundredths tubes use `FastDigits`: the 10 digits of the face cached in RAM at half resolution (8-bit palette indices, ~87 KB, built in ~0.35 s, freed when the countdown stops or is left), pixel-doubled while pushing. Measured: **~40 fps** on the hundredths ones tube.
+- Layout `HH MM SS` (up to 24 h, rounded up like a kitchen timer); in the **last minute** it switches to `00 SS cc` (seconds and hundredths).
+- Outside the last minute the tubes change once per second, exactly like the clock. In the last minute the two hundredths tubes use `FastDigits`: the 10 digits of the face cached in RAM at half resolution (8-bit palette indices, ~87 KB, built ~0.35 s at 1:05 so the switch is seamless, freed when the countdown stops or is left), pixel-doubled while pushing. Measured: **~40 fps** on the hundredths ones tube.
 - Why: a nixie image from LittleFS costs ~41 ms to decode plus ~14 ms to push (issue #10), far too slow for 100 changes per second; at that rate the lost detail is invisible.
 - Tension: in the last 10 s the backlights pulse faster and shift orange → red; at zero all tubes flash `00 00 00` and the backlights strobe red for 10 s (any button dismisses). *Planned:* an MQTT `countdown` event.
 - Runs in the background of other modes with a draining backlight progress bar (breathing while paused), and pops up when it reaches zero.
@@ -130,7 +130,9 @@ Prefix: `tubehax/`. JSON payloads, UTF-8. Timestamps are Unix epoch seconds (flo
 
 ## Connectivity requirements
 
-- WiFi and MQTT reconnect independently, with exponential backoff (1 s → 60 s cap, jitter), never blocking the render loop.
+- **Done:** all networking (WiFi reconnect, MQTT, NTP queries, geolocation, OTA server) runs in its own FreeRTOS task on core 0 (`NetTask`); the main loop on core 1 only handles buttons, modes, displays and backlights, so network trouble can't freeze the tubes. Verified by stopping the broker for 60 s during a countdown: no stalls, 40 fps, automatic reconnect. A display mutex lets the OTA progress screen take over the tubes.
+- "NO WiFi" / "NO MQTT" warnings appear only after a link has been down for over a minute.
+- To do: exponential backoff (1 s → 60 s cap, jitter) for MQTT reconnects.
 - LWT + retained `status` so the broker and the bridge know when the clock is offline.
 - Re-subscribe on every reconnect; retained topics restore the state.
 - Broker host/port/credentials changeable at runtime (stored in NVS) without reflashing; optional mDNS lookup of the homelab broker.

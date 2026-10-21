@@ -112,6 +112,21 @@ void TFTs::toggleAllDisplays()
   }
 }
 
+// True once a link has been down for over a minute. Short drops are normal (reconnects run in the
+// background), so the "NO WiFi" / "NO MQTT" warnings only appear for real outages.
+static uint32_t wifi_down_since = 0, mqtt_down_since = 0;
+static bool linkDownFor(bool up, uint32_t &since)
+{
+  if (up)
+  {
+    since = 0;
+    return false;
+  }
+  if (since == 0)
+    since = millis();
+  return millis() - since > 60000;
+}
+
 void TFTs::setDigit(uint8_t digit, uint8_t value, show_t show)
 {
   if (TFTsEnabled)
@@ -124,14 +139,14 @@ void TFTs::setDigit(uint8_t digit, uint8_t value, show_t show)
       showDigit(digit);
 
       if (digit == SECONDS_ONES && show_status_overlays)
-        if (WifiState != connected)
+        if (linkDownFor(WifiState == connected, wifi_down_since))
         {
           showNoWifiStatus();
         }
 
 #if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
       if (digit == SECONDS_TENS && show_status_overlays)
-        if (!MQTTConnected)
+        if (linkDownFor(MQTTConnected, mqtt_down_since))
         {
           showNoMqttStatus();
         }

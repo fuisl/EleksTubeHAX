@@ -18,7 +18,7 @@
 #include "StoredConfig.h"
 #include "TFTs.h"
 #include "WiFi_WPS.h"
-#include "OTA.h"
+#include "NetTask.h"
 #include "App.h"
 #include "ClockApp.h"
 #include "CountdownApp.h"
@@ -84,6 +84,7 @@ void setup()
   Serial.println("\nSystem starting...\n");
   Serial.println("EleksTubeHAX https://github.com/aly-fly/EleksTubeHAX");
   Serial.printf("Firmware version: v%s.\n", FIRMWARE_VERSION);
+  Serial.printf("Reset reason: %d (1 power-on, 3 software, 4 panic, 5/6/7 watchdog, 9 brownout)\n", esp_reset_reason());
 
   // Prepare unique device name
 #ifdef MQTT_CLIENT_ID_FOR_SMARTNEST
@@ -233,6 +234,7 @@ void setup()
   tfts.fillScreen(TFT_BLACK);
   uclock.loop();
   apps.begin(&clockApp, &settingsApp, modeCycle, sizeof(modeCycle) / sizeof(modeCycle[0])); // Draws the clock
+  NetTaskBegin(); // From here on WiFi, MQTT, NTP, geolocation and OTA run on core 0
   Serial.println("Starting main loop...");
 }
 
@@ -243,15 +245,10 @@ void loop()
 {
   uint32_t millis_at_top = millis();
 
-  // Do all the maintenance work.
-  WifiReconnect(); // If not connected to WiFi, attempt to reconnect
-#ifdef OTA_ENABLED
-  OtaLoop(); // Service over-the-air updates (blocks while an upload is running)
-#endif
+  // Networking (WiFi, MQTT, NTP, geolocation, OTA) runs in the network task; see NetTask.h.
+  tfts.lock(); // Released before the idle delay below
 
 #if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
-  MQTTLoopFrequently();
-
   bool MQTTCommandReceived =
       MQTTCommandMainPowerReceived ||
       MQTTCommandBackPowerReceived ||
@@ -449,8 +446,7 @@ void loop()
   if (MQTTCommandReceived)
   {
     lastMQTTCommandExecuted = millis();
-
-    MQTTReportBackEverything(true);
+    MQTTReportRequested = true; // Published by the network task
   }
 
   if (lastMQTTCommandExecuted != -1)
@@ -475,9 +471,6 @@ void loop()
   checkDimmingNeeded(); // Night or day time brightness change
 #endif
 
-#ifdef GEOLOCATION_ENABLED
-  checkUpdateGeoLocNeeded(); // Check if it is time to update geolocation based timezone offset (just once per day)
-#endif
 
   uint32_t time_in_loop = millis() - millis_at_top;
   if (time_in_loop < 20)
@@ -485,25 +478,16 @@ void loop()
     // we have free time (loop run took under 20 ms), spend it for loading next image into buffer
     tfts.LoadNextImage();
 
-    // Do we still have extra time? -> normally not in the same loop where image loading was done, but in the next loops
-    time_in_loop = millis() - millis_at_top;
-    if (time_in_loop < 20)
-    {
-#if defined(MQTT_PLAIN_ENABLED) || defined(MQTT_HOME_ASSISTANT)
-      MQTTLoopInFreeTime(); // do less time critical MQTT tasks
-#endif
-
-#ifdef GEOLOCATION_ENABLED
-      processGeoLocUpdate();
-#endif // GEOLOCATION_ENABLED
-      // Sleep for up to 20ms, less if we've spent time doing stuff above.
-      time_in_loop = millis() - millis_at_top;
-      if (time_in_loop < 20) // loop was faster than 20ms -> unusually fast, yield some time to other tasks
-      {
-        delay(20 - time_in_loop);
-      }
-    }
   }
+  tfts.unlock();
+
+  // Sleep for up to 20ms, less if we've spent time doing stuff above.
+  time_in_loop = millis() - millis_at_top;
+  if (time_in_loop < 20)
+    delay(20 - time_in_loop);
+  time_in_loop = millis() - millis_at_top;
+  if (time_in_loop > 250)
+    Serial.printf("Slow loop: %lu ms (mode %s, free heap %u)\n", time_in_loop, apps.active()->name(), ESP.getFreeHeap());
 #ifdef DEBUG_OUTPUT
   if (time_in_loop <= 2) // if the loop time is less than 2ms, we don't need to print it in detail
     Serial.print(".");

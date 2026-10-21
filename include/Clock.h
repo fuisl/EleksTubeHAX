@@ -22,9 +22,12 @@ public:
   void begin(StoredConfig::Config::Clock *config_);
   void loop();
 
-  // Calls NTPClient::getEpochTime() or RTC::get() as appropriate
+  // Returns the RTC time. NTP is queried by ntpLoop() (network task), which keeps the RTC in sync.
   // This has to be static to pass to TimeLib::setSyncProvider.
   static time_t syncProvider();
+
+  // Network task: query NTP when due (blocks up to ~1 s) and hand the result to loop().
+  void ntpLoop();
 
   // Adaptive NTP sync methods
   static void handleNtpSuccess();
@@ -112,6 +115,10 @@ private:
   static WiFiUDP ntpUDP;
   static NTPClient ntpTimeClient;
   static uint32_t millis_last_ntp;
+  // NTP result handed from the network task to loop() on the display core.
+  static volatile bool ntp_pending;
+  static volatile time_t ntp_pending_time;
+  static volatile uint32_t ntp_pending_millis;
 
   // Adaptive NTP sync intervals
   static uint32_t current_ntp_interval_ms;

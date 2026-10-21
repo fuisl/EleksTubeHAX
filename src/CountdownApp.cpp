@@ -3,6 +3,9 @@
 #include "TFTs.h"
 
 static const uint32_t DONE_SHOW_MS = 10000;    // How long the "00 00 00" alarm runs before resetting
+static const uint32_t LAST_MINUTE_MS = 60000;   // Below this: 00 SS cc instead of HH MM SS
+static const uint32_t CACHE_AHEAD_MS = 65000;   // Build the hundredths cache (~0.35 s) while digits still change once a second
+static const int32_t MAX_MINUTES = 24 * 60;
 static const uint32_t FINAL_SECONDS_MS = 10000; // Backlight tension phase before zero
 static const uint32_t COLOR_ORANGE = 0xFF6E00;  // Same as the stock backlight color
 static const uint32_t COLOR_RED = 0xFF0000;
@@ -54,12 +57,12 @@ void CountdownApp::setState(State new_state)
 
 void CountdownApp::adjustMinutes(int8_t direction)
 {
-  // 1 minute steps up to 10, 5 up to 60, then 10 (max 99): any value up to an hour in ~20 taps.
-  int16_t m = set_ms / 60000;
+  // Steps of 1 min up to 10 min, 5 up to 1 h, 15 up to 3 h, then 1 h: any value up to an hour in ~20 taps.
+  int32_t m = set_ms / 60000;
   if (direction > 0)
-    m = m < 10 ? m + 1 : m < 60 ? (m / 5 + 1) * 5 : min((m / 10 + 1) * 10, 99);
+    m = m < 10 ? m + 1 : m < 60 ? (m / 5 + 1) * 5 : m < 180 ? (m / 15 + 1) * 15 : min((m / 60 + 1) * 60, MAX_MINUTES);
   else
-    m = m > 60 ? ((m - 1) / 10) * 10 : m > 10 ? ((m - 1) / 5) * 5 : max(m - 1, 0);
+    m = m > 180 ? ((m - 1) / 60) * 60 : m > 60 ? ((m - 1) / 15) * 15 : m > 10 ? ((m - 1) / 5) * 5 : max(m - 1, int32_t(0));
   set_ms = uint32_t(m) * 60000;
   remaining_ms = set_ms;
   drawAll(false);
@@ -68,8 +71,7 @@ void CountdownApp::adjustMinutes(int8_t direction)
 void CountdownApp::enter()
 {
   tfts.show_status_overlays = false;
-  tfts.preload_position = MINUTES_ONES; // Seconds ones, counting down
-  tfts.preload_step = -1;
+  tfts.preload_step = -1; // Counting down; preload_position is set by drawAll()
   fast_active = false;
   blink_shown = -1;
   if (state == done)
@@ -97,7 +99,7 @@ void CountdownApp::loop()
     return;
   }
 
-  bool want_fast = state == running;
+  bool want_fast = state == running && remaining() < CACHE_AHEAD_MS;
   if (want_fast && !fast_active)
   {
     fast_active = fast.ensure(tfts.current_graphic, tfts.dimming);
@@ -117,13 +119,29 @@ void CountdownApp::loop()
 void CountdownApp::drawAll(bool force)
 {
   uint32_t t = remaining();
-  uint8_t minutes = t / 60000, seconds = (t / 1000) % 60, hundredths = (t / 10) % 100;
+  bool last_minute = t < LAST_MINUTE_MS;
+  uint8_t left, middle, right; // Pairs of tubes: HH MM SS, or 00 SS cc in the last minute
+  if (last_minute)
+  {
+    left = 0;
+    middle = t / 1000;
+    right = (t / 10) % 100;
+  }
+  else
+  {
+    uint32_t s = (t + 999) / 1000; // Round up like a kitchen timer: 05:00 shows for the first second
+    left = s / 3600;
+    middle = (s / 60) % 60;
+    right = s % 60;
+  }
+  // Pre-load the next image of the tube that changes once per second.
+  tfts.preload_position = last_minute ? MINUTES_ONES : SECONDS_ONES;
   TFTs::show_t show = force ? TFTs::force : TFTs::yes;
 
-  if (fast_active)
+  if (fast_active && last_minute && state == running)
   {
     // Hundredths first: they are the animation; nixie images below only change once per second.
-    uint8_t values[2] = {uint8_t(hundredths % 10), uint8_t(hundredths / 10)}; // SECONDS_ONES, SECONDS_TENS
+    uint8_t values[2] = {uint8_t(right % 10), uint8_t(right / 10)}; // SECONDS_ONES, SECONDS_TENS
     for (uint8_t i = 0; i < 2; i++)
       if (force || values[i] != fast_shown[i])
       {
@@ -133,20 +151,26 @@ void CountdownApp::drawAll(bool force)
       }
     if (millis() - frames_since >= 10000)
     {
-      Serial.printf("Countdown: hundredths at %u fps\n", frames / 10);
+      Serial.printf("Countdown: hundredths at %u fps, heap free %u min %u largest %u\n", frames / 10,
+                    ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
       frames = 0;
       frames_since = millis();
     }
   }
   else
   {
-    tfts.setDigit(SECONDS_ONES, hundredths % 10, show);
-    tfts.setDigit(SECONDS_TENS, hundredths / 10, show);
+    if (fast_shown[0] != 255)
+    { // Leaving the fast tubes: their full-resolution images must be redrawn
+      show = TFTs::force;
+      fast_shown[0] = fast_shown[1] = 255;
+    }
+    tfts.setDigit(SECONDS_ONES, right % 10, show);
+    tfts.setDigit(SECONDS_TENS, right / 10, show);
   }
-  tfts.setDigit(MINUTES_ONES, seconds % 10, show);
-  tfts.setDigit(MINUTES_TENS, seconds / 10, show);
-  tfts.setDigit(HOURS_ONES, minutes % 10, show);
-  tfts.setDigit(HOURS_TENS, minutes / 10, show);
+  tfts.setDigit(MINUTES_ONES, middle % 10, show);
+  tfts.setDigit(MINUTES_TENS, middle / 10, show);
+  tfts.setDigit(HOURS_ONES, left % 10, show);
+  tfts.setDigit(HOURS_TENS, left / 10, show);
 }
 
 void CountdownApp::drawDone()

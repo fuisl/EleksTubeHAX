@@ -2,11 +2,11 @@
 #define COUNTDOWN_APP_H
 
 /*
- * "Oppenheimer" countdown: MM SS cc (minutes, seconds, hundredths), up to 99:59.99.
- * Minutes and seconds are full-resolution nixie images; while running, the two hundredths tubes
- * are drawn from the FastDigits RAM cache as fast as the SPI bus allows.
+ * "Oppenheimer" countdown, up to 24 hours.
+ * Shows HH MM SS; in the last minute it switches to 00 SS cc (seconds and hundredths), with the two
+ * hundredths tubes drawn from the FastDigits RAM cache as fast as the SPI bus allows.
  *
- * Buttons:  stopped  LEFT/RIGHT tap: -/+ time (1 min steps up to 10, 5 up to 60, then 10)
+ * Buttons:  stopped  LEFT/RIGHT tap: -/+ time (1 min steps up to 10 min, 5 up to 1 h, 15 up to 3 h, then 1 h)
  *                    RIGHT hold: start          LEFT hold: clear to 00:00
  *           running  RIGHT hold: pause/resume   LEFT hold: reset to the set time
  *           done     any button: dismiss
@@ -39,7 +39,7 @@ private:
   uint32_t remaining_ms = 5UL * 60 * 1000;
   uint32_t end_millis = 0;  // millis() at zero, while running
   uint32_t done_millis = 0; // millis() when zero was reached
-  bool fast_active = false; // Hundredths drawn from the RAM cache
+  bool fast_active = false; // FastDigits cache is loaded (from shortly before the last minute)
   uint8_t fast_shown[2] = {255, 255};
   int8_t blink_shown = -1;
   uint16_t frames = 0; // Hundredths frames drawn since frames_since (logged while running)

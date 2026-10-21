@@ -34,7 +34,7 @@ For detailed pictures see the `docs/Hardware EleksTube Gen2` subdirectory.
 
 * Show the actual time on the LCDs of the clock with the selected clock face
 
-* Modes, switched with the MODE button: **Clock** and **Countdown** ("Oppenheimer" style `MM SS cc` with the hundredths racing at ~40 fps, backlight progress bar, alarm at zero; keeps running in the background). Claude and Music modes are planned, see [docs/DESIGN.md](docs/DESIGN.md).
+* Modes, switched with the MODE button: **Clock** and **Countdown** (`HH MM SS` up to 24 h; in the last minute "Oppenheimer" style `00 SS cc` with the hundredths racing at ~40 fps; backlight progress bar, alarm at zero; keeps running in the background). Claude and Music modes are planned, see [docs/DESIGN.md](docs/DESIGN.md).
 
 * Buttons: MODE tap = next mode, hold = back to the clock, long hold (2 s) = settings menu. POWER tap = displays and backlights on/off, hold = backlights only. LEFT/RIGHT depend on the mode (countdown: tap to set the time, hold RIGHT to start/pause, hold LEFT to reset). Full map in [docs/DESIGN.md](docs/DESIGN.md#modes-and-button-map).
 

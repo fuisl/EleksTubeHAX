@@ -38,6 +38,10 @@ public:
   bool show_status_overlays = true;
 
   void begin();
+
+  // Exclusive access to the displays across tasks (main loop vs. the OTA progress screen in the network task).
+  void lock() { xSemaphoreTake(mutex, portMAX_DELAY); }
+  void unlock() { xSemaphoreGive(mutex); }
   void reinit();
   void clear();
   void showNoWifiStatus();
@@ -71,6 +75,7 @@ public:
   uint8_t nameToClockFace(String name);
 
 private:
+  SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
   uint8_t digits[NUM_DIGITS];
   bool TFTsEnabled = false;
 

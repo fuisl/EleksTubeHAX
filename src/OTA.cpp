@@ -64,6 +64,8 @@ static void handleUploadChunk()
     if (!isFirmware)
       LittleFS.end(); // Filesystem is about to be overwritten
     lastPercentShown = 255;
+    WiFi.setSleep(false); // Modem sleep latency spikes slow the upload down
+    tfts.lock();          // Kept until the reboot: the main loop stops drawing
     showOtaScreen(isFirmware ? "Firmware" : "Files");
     // ?size=<bytes> (sent by scripts/ota.sh) gives a correct progress bar and lets Update reject oversized images.
     size_t size = server.hasArg("size") ? server.arg("size").toInt() : UPDATE_SIZE_UNKNOWN;
@@ -118,7 +120,7 @@ static void handleUploadDone()
     server.send(200, "text/plain", "OK, rebooting\n");
   }
   // On failure the running firmware is untouched; a restart is the simplest way to restore the displays.
-  delay(500);
+  delay(1000); // Let the response reach the client before the connection dies with the reboot
   ESP.restart();
 }
 
@@ -128,10 +130,6 @@ void OtaLoop()
   {
     if (WifiState != connected)
       return;
-
-    // Modem sleep adds latency spikes of several hundred ms; the clock is mains powered,
-    // so keep the radio awake (also lowers MQTT latency).
-    WiFi.setSleep(false);
 
     MDNS.begin(UniqueDeviceName); // <UniqueDeviceName>.local
     MDNS.addService("http", "tcp", 80);
