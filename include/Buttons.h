@@ -88,11 +88,7 @@ private:
   {
     if (!isValidPin())
       return false;
-#ifdef CAPACITIVE_TOUCH_BUTTONS
-    return (touchRead(bpin) < TOUCH_THRESHOLD);
-#else
     return (digitalRead(bpin) == active_state);
-#endif
   }
 };
 
@@ -104,7 +100,6 @@ private:
 #define BUTTON_ACTIVE_LEVEL LOW // default: active LOW for hardware buttons with pull-up
 #endif
 
-#ifndef ONE_BUTTON_ONLY_MENU
 // device has 4 buttons -> define all 4 buttons
 class Buttons
 {
@@ -120,24 +115,5 @@ public:
 
 private:
 };
-#endif
-
-#ifdef ONE_BUTTON_ONLY_MENU
-// device has one button only -> define "mode" button only
-class Buttons
-{
-public:
-  Buttons() : mode(BUTTON_MODE_PIN) {}
-
-  void begin();
-  void loop();
-  bool stateChanged();
-
-  // Just making them public, so we don't have to proxy everything.
-  Button mode;
-
-private:
-};
-#endif
 
 #endif // BUTTONS_H

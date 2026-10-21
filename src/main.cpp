@@ -28,118 +28,6 @@
 #include "MQTT_client_ips.h"
 #endif
 
-/************************
- *   NovelLife Clone    *
- ************************/
-#ifdef HARDWARE_NOVELLIFE_CLOCK
-// #include "Gestures.h"
-// TODO put into class
-#include <Wire.h>
-#include <SparkFun_APDS9960.h>
-
-// TODO put into class.
-SparkFun_APDS9960 apds = SparkFun_APDS9960();
-int volatile isr_flag = 0; // Interrupt signal for gesture sensor
-
-extern Buttons buttons;
-
-void GestureStart();
-void HandleGestureInterupt(void);
-void GestureInterruptRoutine(void);
-void HandleGesture(void);
-
-void GestureStart()
-{
-  // For gesture sensor APDS9660 set interrupt pin on ESP32 as input.
-  pinMode(GESTURE_SENSOR_INPUT_PIN, INPUT);
-
-  // Initialize interrupt service routine for APDS-9960 sensor.
-  attachInterrupt(digitalPinToInterrupt(GESTURE_SENSOR_INPUT_PIN), GestureInterruptRoutine, FALLING);
-
-  // Initialize gesture sensor APDS-9960 (configure I2C and initial values).
-  if (apds.init())
-  {
-    Serial.println(F("APDS-9960 initialization complete"));
-
-    // Set Gain to 1x, because the cheap chinese fake APDS sensor can't handle more (also remember to extend ID check in SparkFun libary to 0x3B!).
-    apds.setGestureGain(GGAIN_1X);
-
-    // Start running the APDS-9960 gesture sensor engine.
-    if (apds.enableGestureSensor(true))
-    {
-      Serial.println(F("Gesture sensor is now running"));
-    }
-    else
-    {
-      Serial.println(F("Something went wrong during gesture sensor enablimg in the APDS-9960 library!"));
-    }
-  }
-  else
-  {
-    Serial.println(F("Something went wrong during APDS-9960 init!"));
-  }
-}
-
-// Handle Interrupt from gesture sensor and simulate a short button press (state down_edge) of the corresponding button, if a gesture is detected.
-void HandleGestureInterupt()
-{
-  if (isr_flag == 1)
-  {
-    detachInterrupt(digitalPinToInterrupt(GESTURE_SENSOR_INPUT_PIN));
-    HandleGesture();
-    isr_flag = 0;
-    attachInterrupt(digitalPinToInterrupt(GESTURE_SENSOR_INPUT_PIN), GestureInterruptRoutine, FALLING);
-  }
-  return;
-}
-
-// Mark that the Interrupt of the gesture sensor was signaled.
-void GestureInterruptRoutine()
-{
-  isr_flag = 1;
-  return;
-}
-
-// Check which gesture was detected.
-void HandleGesture()
-{
-  // Serial.println("->main::HandleGesture()");
-  if (apds.isGestureAvailable())
-  {
-    switch (apds.readGesture())
-    {
-    case DIR_UP:
-      buttons.left.setDownEdgeState();
-      Serial.println("Gesture detected! LEFT");
-      break;
-    case DIR_DOWN:
-      buttons.right.setDownEdgeState();
-      Serial.println("Gesture detected! RIGHT");
-      break;
-    case DIR_LEFT:
-      buttons.power.setDownEdgeState();
-      Serial.println("Gesture detected! DOWN");
-      break;
-    case DIR_RIGHT:
-      buttons.mode.setDownEdgeState();
-      Serial.println("Gesture detected! UP");
-      break;
-    case DIR_NEAR:
-      buttons.mode.setDownEdgeState();
-      Serial.println("Gesture detected! NEAR");
-      break;
-    case DIR_FAR:
-      buttons.power.setDownEdgeState();
-      Serial.println("Gesture detected! FAR");
-      break;
-    default:
-      Serial.println("Movement detected but NO gesture detected!");
-    }
-  }
-  return;
-}
-#endif // #ifdef HARDWARE_NOVELLIFE_CLOCK
-
 char UniqueDeviceName[32]; // Enough space for <DeviceName> + 6 hex chars + null
 
 Backlights backlights;
@@ -239,9 +127,7 @@ void setup()
   stored_config.load();
 
   backlights.begin(&stored_config.config.backlights);
-#ifndef NO_BUTTONS
   buttons.begin();
-#endif
   menu.begin();
 
   // Setup the displays (TFTs) initaly and show bootup message(s).
@@ -249,23 +135,8 @@ void setup()
   tfts.fillScreen(TFT_BLACK);
 
   tfts.setTextColor(TFT_WHITE, TFT_BLACK);
-#ifdef DISPLAY_SMALL
-  tfts.setCursor(0, 0, 1); // Font 1. 8 pixel high
-#else
   tfts.setCursor(0, 0, 2); // Font 2. 16 pixel high
-#endif
   tfts.println("Starting Setup...");
-
-#ifdef HARDWARE_NOVELLIFE_CLOCK
-  // Init the Gesture sensor
-  tfts.setTextColor(TFT_ORANGE, TFT_BLACK);
-  tfts.print("Gest start...");
-  Serial.print("Gesture Sensor start...");
-  GestureStart(); // TODO put into class
-  tfts.println("Done!");
-  Serial.println("Done!");
-  tfts.setTextColor(TFT_WHITE, TFT_BLACK);
-#endif // #ifdef HARDWARE_NOVELLIFE_CLOCK
 
   // Setup WiFi connection. Must be done before setting up Clock.
   // This is done outside Clock so the network can be used for other things.
@@ -398,11 +269,7 @@ void loop()
       // Perform reinit, enable, redraw only if displays are actually off. HA sends ON command together with clock face change which causes flickering.
       if (!tfts.isEnabled())
       {
-#ifdef HARDWARE_ELEKSTUBE_CLOCK // Original EleksTube hardware and direct clones need a reinit to wake up the displays properly
-        tfts.reinit();
-#else
-        tfts.enableAllDisplays(); // For all other clocks, just enable the displays
-#endif
+        tfts.enableAllDisplays();
         updateClockDisplay(TFTs::force); // Redraw all the clock digits; needed because the displays was blanked before turning off
       }
     }
@@ -590,16 +457,8 @@ void loop()
   }
 #endif
 
-#ifndef NO_BUTTONS
   buttons.loop();
-#endif
 
-#ifdef HARDWARE_NOVELLIFE_CLOCK
-  HandleGestureInterupt();
-#endif // #ifdef HARDWARE_NOVELLIFE_CLOCK
-
-// if the device has one button only, no power button functionality is needed!
-#ifndef ONE_BUTTON_ONLY_MENU
   // Power button: If in menu, exit menu. Else turn off displays and backlight.
   if (buttons.power.isDownEdge() && (menu.getState() == Menu::idle))
   { // Power button was pressed: if in the menu, exit menu, else turn off displays and backlight.
@@ -612,38 +471,13 @@ void loop()
     }
     else
     {                           // TFT state is disabled, turn ON the displays and backlights
-#ifdef HARDWARE_ELEKSTUBE_CLOCK // Original EleksTube hardware and direct clones need a reinit to wake up the displays properly
-      tfts.reinit();
-#else
-      tfts.enableAllDisplays(); // For all other clocks, just enable the displays
-#endif
+      tfts.enableAllDisplays();
       updateClockDisplay(TFTs::force); // Redraw all the clock digits; needed because the displays was blanked before turning off
       backlights.PowerOn();
     }
   }
-#endif // ONE_BUTTON_ONLY_MENU
 
   menu.loop(buttons); // Must be called after buttons.loop()
-
-#ifdef CAPACITIVE_TOUCH_BUTTONS
-  // D-Esign: LEFT long press while idle -> toggle display and backlight power.
-  if (menu.isPowerToggle())
-  {
-    if (tfts.isEnabled())
-    {
-      tfts.chip_select.setAll();
-      tfts.fillScreen(TFT_BLACK); // Blank the screens before turning off
-      tfts.disableAllDisplays();
-      backlights.PowerOff();
-    }
-    else
-    {
-      tfts.enableAllDisplays();
-      updateClockDisplay(TFTs::force);
-      backlights.PowerOn();
-    }
-  }
-#endif // CAPACITIVE_TOUCH_BUTTONS
 
   backlights.loop();
   uclock.loop();
@@ -875,11 +709,7 @@ void loop()
             tfts.clear();
             tfts.fillScreen(TFT_BLACK);
             tfts.setTextColor(TFT_WHITE, TFT_BLACK);
-#ifdef DISPLAY_SMALL
-            tfts.setCursor(0, 0, 2); // Font 2. 16 pixel high
-#else
             tfts.setCursor(0, 0, 4); // Font 4. 26 pixel high
-#endif
             WiFiStartWps();
           }
         }
@@ -931,13 +761,8 @@ void setupMenu()
 { // Prepare drawing of the menu texts
   tfts.chip_select.setHoursTens();
   tfts.setTextColor(TFT_WHITE, TFT_BLACK);
-#ifdef DISPLAY_SMALL
-  tfts.fillRect(0, 60, 80, 60, TFT_BLACK); // use lower half of the display, fill with black
-  tfts.setCursor(0, 62, 2);                // use font 2 - 16 pixel high - for the menu text
-#else
   tfts.fillRect(0, 120, 135, 120, TFT_BLACK); // use lower half of the display, fill with black
   tfts.setCursor(0, 124, 4);                  // use font 4 - 26 pixel high - for the menu text
-#endif
 }
 
 #ifdef DIMMING

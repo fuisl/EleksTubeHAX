@@ -22,12 +22,7 @@ void Button::begin()
     return;
   }
 
-#ifdef CAPACITIVE_TOUCH_BUTTONS
-  // capacitive touch pins: touchRead() uses the hardware touch peripheral directly,
-  // no pinMode needed (and no pull-up makes sense on a touch ring).
-#else
   pinMode(bpin, INPUT_PULLUP); // pull-up: pin HIGH when idle, LOW when button pressed
-#endif
 
   down_last_time = isButtonDown();
   if (down_last_time)
@@ -129,7 +124,6 @@ const String Button::state_str[Button::num_states] =
 // Superclass for all buttons used (max 4)
 //--------------------------------------------
 
-#ifndef ONE_BUTTON_ONLY_MENU
 // device has 4 buttons -> define all 4 buttons
 void Buttons::begin()
 {
@@ -154,22 +148,4 @@ bool Buttons::stateChanged()
          right.stateChanged() ||
          power.stateChanged();
 }
-#endif
 
-#ifdef ONE_BUTTON_ONLY_MENU
-// device has one button only -> define "mode" button only
-void Buttons::begin()
-{
-  mode.begin();
-}
-
-void Buttons::loop()
-{
-  mode.loop();
-}
-
-bool Buttons::stateChanged()
-{
-  return mode.stateChanged();
-}
-#endif

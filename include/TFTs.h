@@ -13,10 +13,8 @@ class TFTs : public TFT_eSPI
 public:
   TFTs() : TFT_eSPI(), chip_select(), TFTsEnabled(false)
   {
-#ifndef HARDWARE_IPSTUBE_CLOCK
     for (uint8_t digit = 0; digit < NUM_DIGITS; digit++)
       digits[digit] = 0;
-#endif
   }
 
   // no == Do not send to TFT. yes == Send to TFT if changed. force == Send to TFT.

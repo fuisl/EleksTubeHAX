@@ -8,30 +8,11 @@ void TFTs::begin()
   chip_select.setAll(); // Start with all displays selected for broadcast init
   delay(5);             // settling time (needed for I2C expander, harmless for others)
 
-#ifdef DIM_WITH_ENABLE_PIN_PWM
-  // If hardware dimming is used, init ledc, set the pin and channel for PWM and set frequency and resolution
-  ledcSetup(TFT_PWM_CHANNEL, TFT_PWM_FREQ, TFT_PWM_RESOLUTION); // PWM, globally defined
-  ledcWrite(TFT_PWM_CHANNEL, CALCDIMVALUE(0));                  // Set initial dimming value to 0 (off)
-#elif defined(TFT_ENABLE_PIN) && TFT_ENABLE_PIN >= 0
   pinMode(TFT_ENABLE_PIN, OUTPUT); // Set pin for turning display power on and off.
-#endif
   InvalidateImageInBuffer(); // Signal, that the image in the buffer is invalid and needs to be reloaded and refilled
   init(); // Initialize the super class.
-#ifdef CS_DIRECT_GPIO
-  // After TFT_eSPI::init(), the VSPI hardware may have reconfigured one of the CS GPIO pins
-  // as a default SPI signal (e.g. GPIO5 as VSPI SS, GPIO19 as VSPI MISO), leaving it as an
-  // input or in an unexpected state which holds the CS line active for that display.
-  // reclaimPins() uses gpio_reset_pin() to release all CS pins back to software GPIO control.
-  chip_select.reclaimPins(); // regain control of per-digit CS pins after TFT_eSPI::init()
-  chip_select.setAll();      // After regain control, start with all displays selected again
-#endif
   fillScreen(TFT_BLACK); // to avoid/reduce flickering patterns on the screens
 
-#ifdef DIM_WITH_ENABLE_PIN_PWM
-  delay(100);                                                             // give some time to avoid glitches on power up
-  ledcAttachPin(TFT_ENABLE_PIN, TFT_PWM_CHANNEL);                         // Attach the pin to the PWM channel -> this "enables" (backlight power on) the displays
-  ledcChangeFrequency(TFT_PWM_CHANNEL, TFT_PWM_FREQ, TFT_PWM_RESOLUTION); // need to set the frequency and resolution again to have the hardware dimming working properly
-#endif
   enableAllDisplays(); // Signal, that the displays are enabled now and do the hardware dimming, if available and enabled
 
   if (!LittleFS.begin(false, "/littlefs", 5, "littlefs")) // Initialize LittleFS (partition label: littlefs)
@@ -49,28 +30,15 @@ void TFTs::reinit()
 {
   if (!TFTsEnabled) // perform re-init only if displays are actually off. HA sends ON command together with clock face change which causes flickering.
   {
-#ifndef TFT_SKIP_REINIT
     // Start with all displays selected.
     chip_select.begin();
     chip_select.setAll(); // Start again with all displays selected.
 
-#ifdef DIM_WITH_ENABLE_PIN_PWM
-    ledcAttachPin(TFT_ENABLE_PIN, TFT_PWM_CHANNEL);
-    ledcChangeFrequency(TFT_PWM_CHANNEL, TFT_PWM_FREQ, TFT_PWM_RESOLUTION);
-#elif defined(TFT_ENABLE_PIN) && TFT_ENABLE_PIN >= 0
     pinMode(TFT_ENABLE_PIN, OUTPUT); // Set pin for turning display power on and off.
-#endif
     InvalidateImageInBuffer(); // Signal, that the image in the buffer is invalid and needs to be reloaded and refilled
     init();                    // Initialize the super class (again).
-#if defined(HARDWARE_MARVELTUBES_CLOCK)
-    chip_select.reclaimPins(); // regain control of per-digit CS pins after TFT_eSPI::init()
-    chip_select.setAll();      // After regain control, start with all displays selected again
-#endif
     fillScreen(TFT_BLACK); // to avoid/reduce flickering patterns on the screens
     enableAllDisplays();   // Signal, that the displays are enabled now
-#else                      // TFT_SKIP_REINIT
-    enableAllDisplays(); // skip full inintialization, just reenable displays by signaling to enable them
-#endif                     // TFT_SKIP_REINIT
   }
 }
 
@@ -106,13 +74,8 @@ void TFTs::showNoWifiStatus()
 {
   chip_select.setSecondsOnes();
   setTextColor(TFT_RED, TFT_BLACK);
-#ifdef HARDWARE_MARVELTUBESMINI_CLOCK
-  fillRect(0, TFT_HEIGHT - 14, TFT_WIDTH, 14, TFT_BLACK);
-  setCursor(5, TFT_HEIGHT - 14, 2);
-#else
   fillRect(0, TFT_HEIGHT - 27, TFT_WIDTH, 27, TFT_BLACK);
   setCursor(5, TFT_HEIGHT - 27, 4); // Font 4. 26 pixel high
-#endif
   print("NO WiFi!");
 }
 
@@ -120,42 +83,21 @@ void TFTs::showNoMqttStatus()
 {
   chip_select.setSecondsTens();
   setTextColor(TFT_RED, TFT_BLACK);
-#ifdef HARDWARE_MARVELTUBESMINI_CLOCK
-  fillRect(0, TFT_HEIGHT - 14, TFT_WIDTH, 14, TFT_BLACK);
-  setCursor(5, TFT_HEIGHT - 14, 2);
-#else
   fillRect(0, TFT_HEIGHT - 27, TFT_WIDTH, 27, TFT_BLACK);
   setCursor(5, TFT_HEIGHT - 27, 4);
-#endif
   print("NO MQTT!");
 }
 
 void TFTs::enableAllDisplays()
 {
   TFTsEnabled = true;
-#ifdef HARDWARE_MARVELTUBESMINI_CLOCK
-  chip_select.setDim(CALCDIMVALUE(dimming)); // Reg 0x02: backlight on (VCC was never cut)
-#else
   chip_select.setEnabled(true);
-#ifdef DIM_WITH_ENABLE_PIN_PWM
-  // if hardware dimming is used, only activate with the current dimming value
-  ProcessUpdatedDimming();
-#endif
-#endif
 }
 
 void TFTs::disableAllDisplays()
 {
   TFTsEnabled = false;
-#ifdef HARDWARE_MARVELTUBESMINI_CLOCK
-  chip_select.setDim(CALCDIMVALUE(0)); // Reg 0x02 = 0: backlight off, VCC stays on
-#else
   chip_select.setEnabled(false);
-#ifdef DIM_WITH_ENABLE_PIN_PWM
-  // if hardware dimming is used, deactivate via the dimming value
-  ProcessUpdatedDimming();
-#endif
-#endif
 }
 
 void TFTs::toggleAllDisplays()
@@ -222,9 +164,6 @@ void TFTs::showDigit(uint8_t digit)
         NextNumber = 0; // pre-load only seconds, because they are drawn first
       NextFileRequired = current_graphic * 10 + NextNumber;
     }
-#ifdef CS_DIRECT_GPIO
-    chip_select.update();
-#endif
   }
   // else { } //display is disabled, do nothing
 }
@@ -247,26 +186,9 @@ void TFTs::InvalidateImageInBuffer()
 
 void TFTs::ProcessUpdatedDimming()
 {
-#if defined(HARDWARE_MARVELTUBESMINI_CLOCK)
-  // Dimming via Reg 0x02 (PWM backlight). Reg 0x01 (VCC) is never touched during normal on/off.
-  chip_select.setDim(TFTsEnabled ? CALCDIMVALUE(dimming) : CALCDIMVALUE(0));
-#elif defined(DIM_WITH_ENABLE_PIN_PWM)
-  // hardware dimming is done via PWM on the pin defined by TFT_ENABLE_PIN
-  // ONLY for IPSTUBE clocks in the moment! Other clocks may be damaged!
-  if (TFTsEnabled)
-  {
-    ledcWrite(TFT_PWM_CHANNEL, CALCDIMVALUE(dimming));
-  }
-  else
-  {
-    // no dimming means 255 (full brightness)
-    ledcWrite(TFT_PWM_CHANNEL, CALCDIMVALUE(0));
-  }
-#else
   // "software" dimming is done via alpha blending in the image drawing function
   // signal that the image in the buffer is invalid and needs to be reloaded and refilled
   InvalidateImageInBuffer();
-#endif
 }
 
 bool TFTs::FileExists(const char *path)
@@ -449,12 +371,10 @@ bool TFTs::LoadImageIntoBuffer(uint8_t file_index)
       }
 
       uint16_t color = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xFF) >> 3);
-#ifndef DIM_SKIP_SOFTWARE_ALPHA // skip alpha blending for dimming if hardware dimming is used
       if (dimming < 255)
       { // only dim when needed
         color = alphaBlend(dimming, color, TFT_BLACK);
       } // dimming
-#endif
 
       UnpackedImageBuffer[row + y][col + x] = color;
     } // col
@@ -570,9 +490,6 @@ bool TFTs::LoadImageIntoBuffer(uint8_t file_index)
     // Colors are already in 16-bit R5, G6, B5 format
     for (col = 0; col < w; col++)
     {
-#ifdef DIM_SKIP_SOFTWARE_ALPHA // skip alpha blending for dimming if hardware dimming is used
-      UnpackedImageBuffer[row + y][col + x] = (lineBuffer[col * 2 + 1] << 8) | (lineBuffer[col * 2]);
-#else
       if (dimming == 255)
       { // not needed, copy directly
         UnpackedImageBuffer[row + y][col + x] = (lineBuffer[col * 2 + 1] << 8) | (lineBuffer[col * 2]);
@@ -594,7 +511,6 @@ bool TFTs::LoadImageIntoBuffer(uint8_t file_index)
         b = b >> 8;
         UnpackedImageBuffer[row + y][col + x] = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
       } // dimming
-#endif
     } // col
   } // row
   FileInBuffer = file_index;
