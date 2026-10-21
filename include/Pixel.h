@@ -6,7 +6,9 @@
  * a chunky 5x7 pixel font drawn as blocks, the CLI spinner glyphs, segmented gauges.
  * Everything is dimmed together with the nixie images at night.
  *
- * Usage: Pixel::begin(tube) selects one display (and makes its next setDigit() redraw), then draw.
+ * Usage: Pixel::begin(tube) selects one display (and makes its next setDigit() redraw), then draw directly;
+ * or beginFrame(tube) ... endFrame() to compose a whole tube off screen and push it at once (no flicker).
+ * Spinner and Clawd always draw directly (small, incremental updates).
  */
 #include <Arduino.h>
 
@@ -26,7 +28,11 @@ namespace Pixel
 
   uint16_t color(uint32_t rgb); // RGB565 with the current night dimming
   void begin(uint8_t tube);
+  void beginFrame(uint8_t tube); // Draw calls go to a 16-color off-screen copy of this tube (16 KB) ...
+  void endFrame();               // ... until this pushes it. No-op outside a frame.
+  void releaseFrame();           // Free the 16 KB (leaving the mode)
   void clear();
+  void rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t rgb);
 
   int16_t textWidth(const char *s, uint8_t scale);
   // Draws s with each font pixel as a block (with a 1 px gap from scale 4 up). Clears its own box first.

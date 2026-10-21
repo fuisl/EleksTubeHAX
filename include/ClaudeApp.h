@@ -22,6 +22,7 @@ class ClaudeApp : public App
 public:
   const char *name() const override { return "claude"; }
   void enter() override;
+  void exit() override { Pixel::releaseFrame(); } // 16 KB back, e.g. for the countdown's cache
   void loop() override;
   bool onButton(const ButtonEvent &event) override;
 

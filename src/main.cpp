@@ -64,7 +64,6 @@ uint8_t yesterday = 0;
 #endif
 
 #ifdef DIMMING
-bool isDimmingNeeded = false;
 uint8_t hour_old = 255;
 #endif
 
@@ -536,36 +535,24 @@ void SettingsChanged()
 }
 
 void checkDimmingNeeded()
-{                                             // dim the display in the defined night time
-  uint8_t current_hour = uclock.getHour24();  // for internal calcs we always use 24h format
-  isDimmingNeeded = current_hour != hour_old; // check, if the hour has changed since last loop (from time passing by or from timezone change)
-  if (isDimmingNeeded)
-  {
-    Serial.print("Current hour = ");
-    Serial.print(current_hour);
-    Serial.print(", Night Time Start = ");
-    Serial.print(stored_config.config.display.night_start);
-    Serial.print(", Day Time Start = ");
-    Serial.println(stored_config.config.display.day_start);
-    if (isNightTime(current_hour))
-    { // check if it is in the defined night time
-      Serial.println("Set to night time mode (dimmed)!");
-      tfts.dimming = stored_config.config.display.night_tft;
-      tfts.ProcessUpdatedDimming();
-      backlights.setDimming(true);
-    }
-    else
-    {
-      Serial.println("Set to day time mode (max brightness)!");
-      tfts.dimming = 255; // 0..255
-      tfts.ProcessUpdatedDimming();
-      backlights.setDimming(false); // restore the configured backlight intensity
-    }
-    Serial.print("Backlight intensity now: ");
-    Serial.println(backlights.getEffectiveIntensity());
-    apps.redraw(); // Redraw everything; software dimming will be done here
-    hour_old = current_hour;
-  }
+{                                            // dim the display in the defined night time
+  static int8_t night_shown = -1;            // -1: not evaluated yet
+  uint8_t current_hour = uclock.getHour24(); // for internal calcs we always use 24h format
+  if (current_hour == hour_old)
+    return;
+  hour_old = current_hour;
+  bool night = isNightTime(current_hour);
+  // Only a change between day and night redraws: a full redraw every hour shows as a flicker.
+  if (int8_t(night) == night_shown && tfts.dimming == (night ? stored_config.config.display.night_tft : 255))
+    return;
+  night_shown = night;
+  Serial.printf("Current hour = %u, night %u-%u: %s\n", current_hour, stored_config.config.display.night_start,
+                stored_config.config.display.day_start, night ? "dimmed" : "full brightness");
+  tfts.dimming = night ? stored_config.config.display.night_tft : 255; // 0..255
+  tfts.ProcessUpdatedDimming();
+  backlights.setDimming(night);
+  Serial.printf("Backlight intensity now: %u\n", backlights.getEffectiveIntensity());
+  apps.redraw(); // Redraw everything; software dimming is done while drawing
 }
 #endif // DIMMING
 

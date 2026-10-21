@@ -6,10 +6,31 @@
 
 namespace Pixel
 {
+  // Off-screen frame: a 4-bit sprite (16 colors, 16 KB) holding one whole tube. Palette = these colors.
+  static const uint32_t PALETTE[] = {BLACK, ORANGE, ORANGE_DIM, AMBER, RED, TEXT, MUTED, UNLIT, 0x7FC8F8};
+  static TFT_eSprite *frame = nullptr;
+  static bool in_frame = false;
+
+  static TFT_eSPI &target()
+  {
+    return in_frame ? *static_cast<TFT_eSPI *>(frame) : static_cast<TFT_eSPI &>(tfts);
+  }
+
   uint16_t color(uint32_t rgb)
   {
     uint16_t d = tfts.dimming;
     return tfts.color565(((rgb >> 16) & 0xFF) * d / 255, ((rgb >> 8) & 0xFF) * d / 255, (rgb & 0xFF) * d / 255);
+  }
+
+  // Color for the current target: a palette index inside a frame, RGB565 on the display.
+  static uint16_t ink(uint32_t rgb)
+  {
+    if (!in_frame)
+      return color(rgb);
+    for (uint8_t i = 0; i < sizeof(PALETTE) / sizeof(PALETTE[0]); i++)
+      if (PALETTE[i] == rgb)
+        return i;
+    return 1; // Not in the palette: orange
   }
 
   void begin(uint8_t tube)
@@ -17,9 +38,60 @@ namespace Pixel
     tfts.selectCustom(tube);
   }
 
+  void beginFrame(uint8_t tube)
+  {
+    endFrame();
+    tfts.selectCustom(tube);
+    if (frame == nullptr)
+    {
+      frame = new TFT_eSprite(&tfts);
+      frame->setColorDepth(4);
+      if (frame->createSprite(WIDTH, HEIGHT) == nullptr)
+      { // Not enough memory: draw directly (flickers, still correct)
+        delete frame;
+        frame = nullptr;
+      }
+      else
+        frame->createPalette((uint16_t *)nullptr, 16);
+    }
+    if (frame == nullptr)
+    {
+      tfts.fillScreen(TFT_BLACK);
+      return;
+    }
+    for (uint8_t i = 0; i < sizeof(PALETTE) / sizeof(PALETTE[0]); i++)
+      frame->setPaletteColor(i, color(PALETTE[i])); // Night dimming applies to the palette
+    frame->fillSprite(0);
+    in_frame = true;
+  }
+
+  void endFrame()
+  {
+    if (!in_frame)
+      return;
+    in_frame = false;
+    frame->pushSprite(0, 0); // ~14 ms for the whole tube, one pass: no visible clearing
+  }
+
+  void releaseFrame()
+  {
+    endFrame();
+    if (frame != nullptr)
+    {
+      frame->deleteSprite();
+      delete frame;
+      frame = nullptr;
+    }
+  }
+
   void clear()
   {
-    tfts.fillScreen(TFT_BLACK);
+    target().fillRect(0, 0, WIDTH, HEIGHT, ink(BLACK));
+  }
+
+  void rect(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t rgb)
+  {
+    target().fillRect(x, y, w, h, ink(rgb));
   }
 
   int16_t textWidth(const char *s, uint8_t scale)
@@ -38,9 +110,10 @@ namespace Pixel
 
   void text(int16_t x, int16_t y, const char *s, uint8_t scale, uint32_t fg)
   {
-    uint16_t c = color(fg);
+    TFT_eSPI &g = target();
+    uint16_t c = ink(fg);
     int16_t block = scale >= 4 ? scale - 1 : scale; // Gap between blocks gives the pixel-matrix look
-    tfts.fillRect(x, y, textWidth(s, scale), 8 * scale, TFT_BLACK);
+    g.fillRect(x, y, textWidth(s, scale), 8 * scale, ink(BLACK));
     for (; *s; s++, x += 6 * scale)
     {
       uint8_t ch = uint8_t(*s);
@@ -49,14 +122,14 @@ namespace Pixel
         uint8_t bits = font[ch * 5 + col];
         for (uint8_t row = 0; row < 8; row++) // Row 7: descenders (g, p, y)
           if (bits & (1 << row))
-            tfts.fillRect(x + col * scale, y + row * scale, block, block, c);
+            g.fillRect(x + col * scale, y + row * scale, block, block, c);
       }
     }
   }
 
   void textCentered(int16_t y, const char *s, uint8_t scale, uint32_t fg)
   {
-    tfts.fillRect(0, y, WIDTH, 8 * scale, TFT_BLACK);
+    target().fillRect(0, y, WIDTH, 8 * scale, ink(BLACK));
     text((WIDTH - textWidth(s, scale)) / 2, y, s, scale, fg);
   }
 
@@ -109,13 +182,14 @@ namespace Pixel
         for (uint8_t i = 0; i < ink_count; i++)
           if (inks[i].key == rows[r][c])
             rgb = inks[i].color;
-        tfts.fillRect(x + c * cell, y + r * cell, cell, cell, rgb == BLACK ? TFT_BLACK : color(rgb));
+        target().fillRect(x + c * cell, y + r * cell, cell, cell, ink(rgb));
       }
   }
 
   void gauge(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t segments, float fraction, uint32_t fg, bool vertical)
   {
-    uint16_t on = color(fg), off = color(UNLIT);
+    TFT_eSPI &g = target();
+    uint16_t on = ink(fg), off = ink(UNLIT);
     float lit = constrain(fraction, 0.0f, 1.0f) * segments;
     int16_t length = vertical ? h : w;
     int16_t gap = 3, seg = (length - gap * (segments - 1)) / segments;
@@ -125,9 +199,9 @@ namespace Pixel
       uint16_t c = lit >= i + 0.5f ? on : off;
       int16_t offset = i * (seg + gap);
       if (vertical)
-        tfts.fillRect(x, y + h - offset - seg, w, seg, c);
+        g.fillRect(x, y + h - offset - seg, w, seg, c);
       else
-        tfts.fillRect(x + offset, y, seg, h, c);
+        g.fillRect(x + offset, y, seg, h, c);
     }
   }
 

@@ -66,8 +66,7 @@ bool ClaudeApp::needsDraw(uint8_t tube, const String &signature, bool force)
   if (!force && drawn[tube] == signature && tfts.getDigit(tube) == TFTs::custom)
     return false;
   drawn[tube] = signature;
-  Pixel::begin(tube);
-  Pixel::clear();
+  Pixel::beginFrame(tube); // Composed off screen; draw() pushes it with Pixel::endFrame()
   return true;
 }
 
@@ -100,8 +99,11 @@ void ClaudeApp::draw(bool force)
   drawVerb(force);
   drawTime(force);
   drawStatus(force);
+  Pixel::endFrame(); // These three may return early inside their frame
   drawHistory(force);
+  Pixel::endFrame();
   drawRelease(force);
+  Pixel::endFrame();
 }
 
 void ClaudeApp::drawClawd(bool force)
@@ -110,6 +112,7 @@ void ClaudeApp::drawClawd(bool force)
   {
     clawd.redraw();
     Pixel::textCentered(206, "CLAUDE", 3, Pixel::ORANGE_DIM);
+    Pixel::endFrame();
   }
   else
     tfts.selectCustom(TUBE1);
@@ -153,6 +156,7 @@ void ClaudeApp::drawVerb(bool force)
       Pixel::textCentered(100, first, 3, color);
       Pixel::textCentered(130, word + 6, Pixel::fitScale(word + 6, 3), color);
     }
+    Pixel::endFrame();
   }
   else
     tfts.selectCustom(TUBE2);
@@ -164,9 +168,9 @@ void ClaudeApp::drawVerb(bool force)
   uint8_t dots = (ms / 400) % 4;
   if (dots != dots_shown || redrawn)
   {
-    tfts.fillRect(0, 168, Pixel::WIDTH, 21, TFT_BLACK);
+    Pixel::rect(0, 168, Pixel::WIDTH, 21, Pixel::BLACK);
     for (uint8_t i = 0; i < dots; i++)
-      tfts.fillRect(46 + i * 16, 180, 9, 9, Pixel::color(color));
+      Pixel::rect(46 + i * 16, 180, 9, 9, color);
     dots_shown = dots;
   }
   uint32_t t = utcNow();
@@ -198,6 +202,7 @@ void ClaudeApp::drawTime(bool force)
     Pixel::textCentered(22, hh, 10, Pixel::ORANGE);
     Pixel::textCentered(116, mm, 10, Pixel::ORANGE);
     Pixel::textCentered(200, date, 2, Pixel::MUTED);
+    Pixel::endFrame();
     seconds_shown = -1;
   }
   else
@@ -207,12 +212,12 @@ void ClaudeApp::drawTime(bool force)
   int8_t s = uclock.getSecond();
   if (s != seconds_shown)
   {
-    uint16_t on = s % 2 ? Pixel::color(Pixel::ORANGE_DIM) : TFT_BLACK;
-    tfts.fillRect(52, 98, 9, 9, on);
-    tfts.fillRect(74, 98, 9, 9, on);
+    uint32_t on = s % 2 ? Pixel::ORANGE_DIM : Pixel::BLACK;
+    Pixel::rect(52, 98, 9, 9, on);
+    Pixel::rect(74, 98, 9, 9, on);
     if (s < seconds_shown || seconds_shown < 0)
-      tfts.fillRect(8, 226, 120, 5, Pixel::color(Pixel::UNLIT));
-    tfts.fillRect(8, 226, 2 * s, 5, Pixel::color(Pixel::ORANGE_DIM));
+      Pixel::rect(8, 226, 120, 5, Pixel::UNLIT);
+    Pixel::rect(8, 226, 2 * s, 5, Pixel::ORANGE_DIM);
     seconds_shown = s;
   }
 }
@@ -275,9 +280,9 @@ void ClaudeApp::drawStatus(bool force)
     Pixel::text(129 - Pixel::textWidth(pct, 2), y, pct, 2, l.valid ? Pixel::ORANGE : Pixel::MUTED);
     float f = l.valid ? constrain(l.pct / 100.0f, 0.0f, 1.0f) : 0;
     uint32_t fill = l.pct >= 95 ? Pixel::RED : l.pct >= 80 ? Pixel::AMBER : Pixel::ORANGE;
-    tfts.fillRect(6, y + 18, 123, 8, Pixel::color(Pixel::UNLIT));
+    Pixel::rect(6, y + 18, 123, 8, Pixel::UNLIT);
     if (f > 0)
-      tfts.fillRect(6, y + 18, max(int16_t(2), int16_t(123 * f)), 8, Pixel::color(fill));
+      Pixel::rect(6, y + 18, max(int16_t(2), int16_t(123 * f)), 8, fill);
     String reset = l.valid ? until(l.resets_at) : "";
     if (reset.length())
       Pixel::text(6, y + 30, reset.c_str(), 1, Pixel::MUTED);
@@ -293,7 +298,7 @@ void ClaudeApp::drawStatus(bool force)
     snprintf(summary, sizeof(summary), "%u/%u UP", up, data.component_count);
     Pixel::text(6, 214, summary, 1, Pixel::MUTED);
     for (uint8_t i = 0; i < data.component_count; i++)
-      tfts.fillRect(64 + i * 11, 212, 9, 11, Pixel::color(healthColor(data.component_health[i])));
+      Pixel::rect(64 + i * 11, 212, 9, 11, healthColor(data.component_health[i]));
   }
 }
 
@@ -313,9 +318,9 @@ void ClaudeApp::drawHistory(bool force)
   for (uint8_t i = 0; i < OnlineData::STATUS_DAYS; i++)
   {
     uint8_t impact = min(data.days[i], uint8_t(3));
-    tfts.fillRect(8 + i * 4, 104 - HEIGHT[impact], 3, HEIGHT[impact], Pixel::color(COLOR[impact]));
+    Pixel::rect(8 + i * 4, 104 - HEIGHT[impact], 3, HEIGHT[impact], COLOR[impact]);
   }
-  tfts.fillRect(8, 106, 119, 1, Pixel::color(Pixel::UNLIT));
+  Pixel::rect(8, 106, 119, 1, Pixel::UNLIT);
 
   if (!data.has_status)
     return;
@@ -357,7 +362,7 @@ void ClaudeApp::drawRelease(bool force)
     uint8_t n = min(data.release_days[i], uint8_t(4));
     total += data.release_days[i];
     int16_t h = n ? n * 13 : 3;
-    tfts.fillRect(5 + i * 9, 132 - h, 7, h, Pixel::color(n ? Pixel::ORANGE : Pixel::UNLIT));
+    Pixel::rect(5 + i * 9, 132 - h, 7, h, n ? Pixel::ORANGE : Pixel::UNLIT);
   }
   char count[16];
   snprintf(count, sizeof(count), "%u IN 14D", total);
