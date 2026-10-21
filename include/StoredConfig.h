@@ -64,6 +64,18 @@ public:
       char password[str_buffer_size];
       uint8_t WPS_connected; // Write StoredConfig::valid here when valid data is loaded.
     } wifi;
+
+    // Added by TubeHAX; kept last so configs saved by older firmware still load (this part stays invalid).
+    struct Display
+    {
+      bool dimming;            // Night dimming on/off
+      uint8_t night_start;     // Hour (local) the night starts
+      uint8_t day_start;       // Hour (local) the day starts
+      uint8_t night_backlight; // Backlight intensity at night, 0..7
+      uint8_t night_tft;       // Display brightness at night, 0..255
+      bool auto_claude;        // Jump to Claude mode when Claude needs you or finishes
+      uint8_t is_valid;        // Write StoredConfig::valid here when valid data is loaded.
+    } display;
   } config;
 
   const static uint8_t valid = 0x55; // neither 0x00 nor 0xFF, signaling loaded config isn't just default data.

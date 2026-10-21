@@ -62,7 +62,7 @@ void Backlights::setIntensity(uint8_t intensity)
 
 uint8_t Backlights::getEffectiveIntensity()
 {
-  return dimming ? (uint8_t)BACKLIGHT_DIMMED_INTENSITY : config->intensity;
+  return dimming ? dimmed_intensity : config->intensity;
 }
 
 void Backlights::setOverride(uint8_t led, uint32_t color)
@@ -113,7 +113,7 @@ void Backlights::loop()
     }
     if (dimming)
     {
-      setBrightness(0xFF >> max_intensity - BACKLIGHT_DIMMED_INTENSITY - 1);
+      setBrightness(0xFF >> max_intensity - dimmed_intensity - 1);
     }
     else
     {
@@ -145,7 +145,7 @@ void Backlights::pulsePattern()
   float val = 1 + abs(sin(2 * M_PI * millis() / pulse_length_millis)) * 254;
   if (dimming)
   {
-    val = val * BACKLIGHT_DIMMED_INTENSITY / 7;
+    val = val * dimmed_intensity / 7;
   }
   else
   {
@@ -167,7 +167,7 @@ void Backlights::breathPattern()
 
   if (dimming)
   {
-    val = val * BACKLIGHT_DIMMED_INTENSITY / 7;
+    val = val * dimmed_intensity / 7;
   }
   else
   {
@@ -198,7 +198,7 @@ void Backlights::testPattern()
 
   if (dimming)
   {
-    setBrightness(0xFF >> max_intensity - (uint8_t)BACKLIGHT_DIMMED_INTENSITY - 1);
+    setBrightness(0xFF >> max_intensity - dimmed_intensity - 1);
   }
   else
   {
@@ -282,11 +282,8 @@ void Backlights::rainbowPattern()
   }
   if (dimming)
   {
-#if BACKLIGHT_DIMMED_INTENSITY > 0
-    setBrightness(0xFF >> max_intensity - (uint8_t)BACKLIGHT_DIMMED_INTENSITY - 1);
-#else // turn off backlight if intensity is 0
-    setBrightness(0);
-#endif
+    // Intensity 0 turns the backlight off at night
+    setBrightness(dimmed_intensity > 0 ? 0xFF >> max_intensity - dimmed_intensity - 1 : 0);
   }
   else
   {

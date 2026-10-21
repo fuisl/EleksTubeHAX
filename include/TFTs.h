@@ -26,6 +26,8 @@ public:
   };
   // A digit of 0xFF means blank the screen.
   const static uint8_t blanked = 255;
+  // Display shows something other than a digit image (pixel theme); the next setDigit() redraws it.
+  const static uint8_t custom = 254;
 
   uint8_t dimming = 255; // amount of dimming graphics
   uint8_t current_graphic = 1;
@@ -49,6 +51,12 @@ public:
 
   void setDigit(uint8_t digit, uint8_t value, show_t show = yes);
   uint8_t getDigit(uint8_t digit) { return digits[digit]; }
+  // Select one display for custom drawing with the TFT_eSPI functions (see Pixel.h).
+  void selectCustom(uint8_t digit)
+  {
+    digits[digit] = custom;
+    chip_select.setDigit(digit);
+  }
 
   void showAllDigits()
   {

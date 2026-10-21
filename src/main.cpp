@@ -23,6 +23,7 @@
 #include "App.h"
 #include "ClockApp.h"
 #include "CountdownApp.h"
+#include "ClaudeApp.h"
 #include "SettingsApp.h"
 
 #ifdef GEOLOCATION_ENABLED
@@ -44,8 +45,9 @@ StoredConfig stored_config;
 AppManager apps;
 ClockApp clockApp;
 CountdownApp countdownApp;
+ClaudeApp claudeApp;
 SettingsApp settingsApp(clockApp);
-App *const modeCycle[] = {&clockApp, &countdownApp}; // MODE tap order
+App *const modeCycle[] = {&clockApp, &countdownApp, &claudeApp}; // MODE tap order
 
 #ifdef GEOLOCATION_ENABLED
 double GeoLocTZoffset = 0;
@@ -134,8 +136,14 @@ void setup()
 
   stored_config.begin();
   stored_config.load();
+  StoredConfig::Config::Display &display = stored_config.config.display;
+  if (display.is_valid != StoredConfig::valid)
+  { // First boot with TubeHAX settings: defaults from _USER_DEFINES.h
+    display = {true, NIGHT_TIME, DAY_TIME, BACKLIGHT_DIMMED_INTENSITY, TFT_DIMMED_INTENSITY, true, StoredConfig::valid};
+  }
 
   backlights.begin(&stored_config.config.backlights);
+  backlights.dimmed_intensity = display.night_backlight;
   buttons.begin();
 
   // Setup the displays (TFTs) initaly and show bootup message(s).
@@ -504,15 +512,27 @@ void loop()
 
 #ifdef DIMMING
 bool isNightTime(uint8_t current_hour)
-{ // check the actual hour is in the defined "night time"
-  if (DAY_TIME < NIGHT_TIME)
+{ // check the actual hour is in the configured "night time" (settings: admin page / MQTT)
+  const StoredConfig::Config::Display &d = stored_config.config.display;
+  if (!d.dimming || d.night_start == d.day_start)
+    return false;
+  if (d.day_start < d.night_start)
   { // "Night" spans across midnight so it is split between two days
-    return (current_hour < DAY_TIME) || (current_hour >= NIGHT_TIME);
+    return (current_hour < d.day_start) || (current_hour >= d.night_start);
   }
   else
   { // "Night" starts after midnight, entirely contained within the current day
-    return (current_hour >= NIGHT_TIME) && (current_hour < DAY_TIME);
+    return (current_hour >= d.night_start) && (current_hour < d.day_start);
   }
+}
+
+// Settings changed at runtime (Remote): re-evaluate night dimming and redraw.
+void SettingsChanged()
+{
+  backlights.dimmed_intensity = stored_config.config.display.night_backlight;
+  hour_old = 255;
+  checkDimmingNeeded();
+  apps.redraw();
 }
 
 void checkDimmingNeeded()
@@ -524,13 +544,13 @@ void checkDimmingNeeded()
     Serial.print("Current hour = ");
     Serial.print(current_hour);
     Serial.print(", Night Time Start = ");
-    Serial.print(NIGHT_TIME);
+    Serial.print(stored_config.config.display.night_start);
     Serial.print(", Day Time Start = ");
-    Serial.println(DAY_TIME);
+    Serial.println(stored_config.config.display.day_start);
     if (isNightTime(current_hour))
     { // check if it is in the defined night time
       Serial.println("Set to night time mode (dimmed)!");
-      tfts.dimming = TFT_DIMMED_INTENSITY;
+      tfts.dimming = stored_config.config.display.night_tft;
       tfts.ProcessUpdatedDimming();
       backlights.setDimming(true);
     }

@@ -96,6 +96,7 @@ public:
     pattern_needs_init = true;
   }
   uint8_t getEffectiveIntensity(); // intensity actually driven to the LEDs: night-time dimmed level or configured intensity
+  uint8_t dimmed_intensity = BACKLIGHT_DIMMED_INTENSITY; // Night intensity 0..7 (StoredConfig display.night_backlight)
 
   // Lets a mode drive the LEDs directly (e.g. countdown progress). Colors are 0xRRGGBB, scaled by the
   // effective intensity; power off still wins. The configured pattern resumes after releaseOverride().

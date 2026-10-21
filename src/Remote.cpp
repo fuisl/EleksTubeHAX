@@ -7,8 +7,12 @@
 #include "App.h"
 #include "Backlights.h"
 #include "CountdownApp.h"
+#include "Clock.h"
+#include "StoredConfig.h"
 
 extern CountdownApp countdownApp; // main.cpp
+extern StoredConfig stored_config;
+void SettingsChanged(); // main.cpp: re-evaluate night dimming, redraw
 
 namespace
 {
@@ -21,10 +25,11 @@ namespace
       CountdownSet,   // value: duration in ms
       CountdownAction,
       Displays,
-      Backlights
+      Backlights,
+      Setting // name: key, value: int32
     } kind;
     uint32_t value;
-    char name[16];
+    char name[24]; // Mode name or setting key
   };
 
   enum Action : uint32_t
@@ -36,12 +41,34 @@ namespace
     ActionReset
   };
 
+  // Settings that can be changed remotely: key, min, max (docs/DESIGN.md#mqtt-contract-v1-clock).
+  struct SettingSpec
+  {
+    const char *key;
+    int32_t min, max;
+  };
+  const SettingSpec SETTINGS[] = {
+      {"twelve_hour", 0, 1},
+      {"blank_hours_zero", 0, 1},
+      {"utc_offset_min", -720, 840},
+      {"dimming", 0, 1},
+      {"night_start", 0, 23},
+      {"day_start", 0, 23},
+      {"night_backlight", 0, 7},
+      {"night_tft", 0, 255},
+      {"backlight_intensity", 0, 7},
+      {"backlight_hue", 0, 359},
+      {"auto_claude", 0, 1},
+  };
+  const uint32_t SAVE_DELAY_MS = 2000; // Several settings in a row cause one flash write
+  uint32_t save_due = 0;
+
   const uint32_t STATE_REFRESH_MS = 1000;    // "remaining" in GET /api/state is at most this old
   const uint32_t STATE_HEARTBEAT_MS = 30000; // MQTT publish without a change (RSSI, uptime, remaining)
 
   QueueHandle_t queue = nullptr;
   portMUX_TYPE state_lock = portMUX_INITIALIZER_UNLOCKED;
-  char state_json[512] = "{}";
+  char state_json[1024] = "{}";
   bool state_dirty = false; // Changed since the network task last published
 
   uint32_t last_refresh = 0, last_publish = 0;
@@ -67,6 +94,35 @@ namespace
         return true;
       }
     return false;
+  }
+
+  void applySetting(const char *key, int32_t v)
+  {
+    StoredConfig::Config &c = stored_config.config;
+    if (strcmp(key, "twelve_hour") == 0)
+      c.uclock.twelve_hour = v;
+    else if (strcmp(key, "blank_hours_zero") == 0)
+      c.uclock.blank_hours_zero = v;
+    else if (strcmp(key, "utc_offset_min") == 0)
+      uclock.setTimeZoneOffset(time_t(v) * 60);
+    else if (strcmp(key, "dimming") == 0)
+      c.display.dimming = v;
+    else if (strcmp(key, "night_start") == 0)
+      c.display.night_start = v;
+    else if (strcmp(key, "day_start") == 0)
+      c.display.day_start = v;
+    else if (strcmp(key, "night_backlight") == 0)
+      c.display.night_backlight = v;
+    else if (strcmp(key, "night_tft") == 0)
+      c.display.night_tft = v;
+    else if (strcmp(key, "backlight_intensity") == 0)
+      backlights.setIntensity(v);
+    else if (strcmp(key, "backlight_hue") == 0)
+      backlights.setColorPhase(backlights.hueToPhase(float(v)));
+    else if (strcmp(key, "auto_claude") == 0)
+      c.display.auto_claude = v;
+    save_due = millis() + SAVE_DELAY_MS;
+    SettingsChanged();
   }
 
   void apply(const Command &command)
@@ -105,6 +161,9 @@ namespace
     case Command::Backlights:
       if (bool(command.value) != backlights.getPower())
         backlights.togglePower();
+      break;
+    case Command::Setting:
+      applySetting(command.name, int32_t(command.value));
       break;
     }
   }
@@ -146,6 +205,19 @@ namespace
     cd["remaining"] = left / 1000.0f;
     if (strcmp(cd_state, "running") == 0 && timeStatus() != timeNotSet)
       cd["ends_at"] = uint32_t(now() + (left + 500) / 1000); // UTC epoch, for retained copies read later
+    const StoredConfig::Config &c = stored_config.config;
+    JsonObject settings = doc["settings"].to<JsonObject>();
+    settings["twelve_hour"] = c.uclock.twelve_hour;
+    settings["blank_hours_zero"] = c.uclock.blank_hours_zero;
+    settings["utc_offset_min"] = int32_t(uclock.getTimeZoneOffset() / 60);
+    settings["dimming"] = c.display.dimming;
+    settings["night_start"] = c.display.night_start;
+    settings["day_start"] = c.display.day_start;
+    settings["night_backlight"] = c.display.night_backlight;
+    settings["night_tft"] = c.display.night_tft;
+    settings["backlight_intensity"] = c.backlights.intensity;
+    settings["backlight_rgb"] = backlights.getColor();
+    settings["auto_claude"] = c.display.auto_claude;
     doc["ip"] = WiFi.localIP().toString();
     doc["rssi"] = WiFi.RSSI();
     doc["ch"] = WiFi.channel();
@@ -233,6 +305,24 @@ bool RemoteSubmit(const char *json, size_t length, String &error)
       return false;
     }
   }
+  JsonObjectConst settings = doc["settings"];
+  for (JsonPairConst kv : settings)
+  {
+    const SettingSpec *spec = nullptr;
+    for (const SettingSpec &s : SETTINGS)
+      if (strcmp(kv.key().c_str(), s.key) == 0)
+        spec = &s;
+    bool numeric = kv.value().is<int32_t>() || kv.value().is<bool>();
+    int32_t v = kv.value().is<bool>() ? int32_t(kv.value().as<bool>()) : kv.value().as<int32_t>();
+    if (spec == nullptr || !numeric || v < spec->min || v > spec->max)
+    {
+      error = String("bad setting: ") + kv.key().c_str();
+      return false;
+    }
+    Command command{Command::Setting, uint32_t(v), ""};
+    strlcpy(command.name, spec->key, sizeof(command.name));
+    add(command);
+  }
   if (doc["displays"].is<bool>())
     add(Command{Command::Displays, doc["displays"].as<bool>(), ""});
   if (doc["backlights"].is<bool>())
@@ -257,6 +347,12 @@ void RemoteLoop()
   }
 
   uint32_t now_ms = millis();
+  if (save_due != 0 && int32_t(now_ms - save_due) >= 0)
+  {
+    save_due = 0;
+    stored_config.save();
+    Serial.println("Remote: settings saved");
+  }
   static StateKey last_key{};
   StateKey key = stateKey();
   bool changed = applied || key != last_key;

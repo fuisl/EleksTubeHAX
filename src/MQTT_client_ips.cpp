@@ -34,6 +34,7 @@
 #include "Backlights.h"
 #include "Clock.h"
 #include "Remote.h"
+#include "ClaudeData.h"
 #include "TFTs.h"
 #ifdef MQTT_USE_TLS // For secure WiFi client
 #include <WiFiClientSecure.h>
@@ -529,6 +530,7 @@ bool MQTTStart(bool restart)
     {
       char topic[64];
       MQTTclient.subscribe(remoteTopic(topic, sizeof(topic), "cmd"));
+      MQTTclient.subscribe(CLAUDE_TOPICS); // Retained: the latest Claude state arrives right away
       remoteStateResend = true;
     }
 
@@ -593,6 +595,8 @@ void MQTTCallback(char *topic, byte *payload, unsigned int length)
       Serial.printf("Remote: rejected MQTT command: %s\n", error.c_str());
     return;
   }
+  if (ClaudeDataHandle(topic, payload, length))
+    return;
 
 #ifdef DEBUG_OUTPUT_MQTT
   Serial.println("");

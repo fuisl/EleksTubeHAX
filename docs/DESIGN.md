@@ -102,7 +102,9 @@ Pages (LEFT/RIGHT):
 3. **Context** — context used %, input/output tokens, rendered in the orange pixel theme with a gauge.
 4. **Session** — elapsed session time `HH MM SS` nixie, cost in USD, lines +/−.
 
-Auto-switch (toggleable): the clock jumps to Claude/Live when Claude starts working, needs permission, or finishes — and returns to the previous mode after a timeout.
+Implemented (`src/ClaudeApp.cpp`, `src/Pixel.cpp`): the pixel theme draws the 5x7 font as blocks with a 1 px gap (pixel-matrix look), the CLI spinner `· ✢ ✳ ✶ ✻ ✽` on an 11x11 block grid (only changed blocks are redrawn, ~120 ms per frame), and segmented gauges, all dimmed with the night setting. Page 2 shows a 7-day window as `D HH MM`. Plan usage is a backlight bar in the clock's own color rather than green → orange → red (calmer); waiting is steady amber. Without a status line (VS Code panel) the session page shows output tokens instead of cost.
+
+Auto-switch (setting `auto_claude`, on by default): when the clock shows the time and Claude asks for permission or finishes a turn, it switches to Claude/Live, and back after 60 s without news (any button keeps it there).
 
 ### Music
 - Song position `MM SS` in nixie (tubes 3–6, interpolated locally), track/artist scrolling in the orange pixel theme (tubes 1–2), progress shown on the backlights.
@@ -111,15 +113,18 @@ Auto-switch (toggleable): the clock jumps to Claude/Live when Claude starts work
 ### Idle / screensaver (idea)
 Claude CLI-style pixel animation across the six tubes when nothing is happening.
 
-## MQTT contract (draft v0)
+## MQTT contract
+
+v1 for the clock and Claude topics; music and focus are still drafts.
 
 Prefix: `tubehax/`. JSON payloads, UTF-8. Timestamps are Unix epoch seconds (float allowed).
 
 | Topic | Dir | Retained | Payload |
 |---|---|---|---|
-| `tubehax/claude/state` | bridge → clock | yes | `{"session_id","state":"idle\|working\|tool\|waiting\|done","tool","since","model","project"}` |
-| `tubehax/claude/metrics` | bridge → clock | yes | `{"session_id","ctx_pct","tokens_in","tokens_out","cost_usd","session_ms","lines_added","lines_removed","sampled_at"}` |
-| `tubehax/claude/limits` | bridge → clock | yes | `{"five_hour":{"pct","resets_at"},"seven_day":{"pct","resets_at"},"sampled_at"}` |
+| `tubehax/claude/state` | bridge → clock | yes | `{"v":1,"session_id","state":"idle\|working\|waiting\|done","tool","model","project","since","work_started","work_ended","sessions"}` |
+| `tubehax/claude/metrics` | bridge → clock | yes | `{"v":1,"session_id","model","project","ctx_pct","ctx_size","tokens_in","tokens_out","cost_usd","duration_ms","lines_added","lines_removed","sampled_at"}` (cost and lines `null` without a status line) |
+| `tubehax/claude/limits` | bridge → clock | yes | `{"v":1,"five_hour":{"pct","resets_at"},"seven_day":{"pct","resets_at"},"sampled_at"}` |
+| `tubehax/bridge/status` | bridge → broker | yes (LWT) | `online` / `offline` |
 | `tubehax/music/now` | bridge → clock | yes | `{"playing","title","artist","position","duration","sampled_at","rate"}` |
 | `tubehax/mac/focus` | bridge → clock | no | `{"app","is_claude_terminal"}` |
 | `tubehax/music/cmd` | clock → bridge | no | `"next" \| "prev" \| "toggle"` |
@@ -136,12 +141,15 @@ Implemented in `src/Remote.cpp`. The same JSON commands are accepted by the cloc
 **Command** → `tubehax/clock/<id>/cmd` (all fields optional, combinable):
 
 ```json
-{"mode": "clock|countdown",
+{"mode": "clock|countdown|claude",
  "countdown": {"start": 1500, "set": 300, "action": "start|pause|resume|toggle|reset"},
- "displays": true, "backlights": false}
+ "displays": true, "backlights": false,
+ "settings": {"twelve_hour": false, "blank_hours_zero": false, "utc_offset_min": 420,
+              "dimming": true, "night_start": 22, "day_start": 7, "night_backlight": 1, "night_tft": 20,
+              "backlight_intensity": 6, "backlight_hue": 26, "auto_claude": true}}
 ```
 
-`start` sets the duration in seconds and starts right away (and shows the countdown); `set` only sets it (stopped); `toggle` starts, pauses or resumes. Unknown modes or actions are rejected (HTTP 400, logged on serial for MQTT).
+`start` sets the duration in seconds and starts right away (and shows the countdown); `set` only sets it (stopped); `toggle` starts, pauses or resumes. Unknown modes or actions are rejected (HTTP 400, logged on serial for MQTT). Settings are range-checked (`night_backlight` 0–7, `night_tft` 0–255, hours 0–23, `utc_offset_min` −720…840, `backlight_hue` 0–359), applied at once and saved to NVS 2 s after the last change. The state echoes them under `"settings"` (with `backlight_rgb` instead of the hue). Not yet remote: broker host/credentials.
 
 **State** ← `tubehax/clock/<id>/state`, retained, published on every change and every 30 s:
 
