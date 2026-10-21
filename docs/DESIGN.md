@@ -181,11 +181,12 @@ The homelab (`fuisl`, Ubuntu 24.04, LAN `192.168.1.13`, NetBird `100.82.196.126`
 
 ### Security (audit 2026-10-21)
 
-The homelab (Ubuntu 24.04) is also a shared GPU box (k3s, Slurm, other accounts). Findings and actions:
+The homelab (Ubuntu 24.04) is also a single-node k3s and Slurm GPU box with public apps and other accounts. Findings and actions:
 
-- **Internet exposure:** it has a public IPv6 address, but no failed SSH logins in 7 days suggests the router blocks inbound traffic. Not verified from outside.
-- **SSH** (`homelab/harden-ssh.sh`, run with sudo, 10-minute auto-rollback until confirmed): port 22 only from loopback, NetBird (`wt0`) and the LAN (192.168.1.0/24); everything else gets a TCP reset (own nftables table, other rules untouched). Keys only, no X11 forwarding.
-- **Still open (recommended):** install the 4 pending security updates; `PermitRootLogin no`; bind Mosquitto 1883/9001 to the LAN and NetBird only (the clock needs the LAN); review the k3s API 6443 / kubelet 10250 / Slurm 6817-6818 listeners on all interfaces (all authenticated); UFW stays off because enabling it needs k3s/Docker-aware rules; membership in `docker` is root-equivalent.
+- **Internet exposure:** the router forwards 80/443 to it (Traefik ingresses `api.coipe.app`, `api.grad26.fuisloy.dev`, public IP 171.235.118.136); it also has a public IPv6 address. No failed SSH logins in 7 days: SSH is not forwarded.
+- **`homelab/harden-homelab.sh`** (run with sudo; 10-minute auto-rollback until confirmed): admin ports 22 (SSH), 6443 (k3s API), 10250 (kubelet), 6817/6818 (Slurm), 8472/udp (flannel) only from loopback, NetBird (`wt0`), the LAN (192.168.1.0/24) and local pods/containers (`cni0`, `docker0`, `br-*`, 10.42.0.0/15, 172.16.0.0/12); refused from anywhere else. Own nftables table (validated with nftables 1.0.9); Docker/k3s rules untouched; 80/443 and MQTT unaffected. sshd: keys only, no root login, no X11 forwarding.
+- **Reviewed, kept:** k3s is single-node (no flannel peers); its API is used by the host and its own pods, the kubelet by the local API server. Slurm controller and its only node are this machine (munge auth). Port 32589 is kube-proxy's health check for Traefik.
+- **Still recommended:** install the 4 pending security updates; bind Mosquitto 1883/9001 to the LAN and NetBird only (the clock needs the LAN); UFW stays off because enabling it needs k3s/Docker-aware rules; membership in `docker` is root-equivalent.
 - **Claude login on the homelab:** whoever gets into the `fuisloy` account can use it (see Claude data sources). The feeds container only gets the short-lived access token.
 
 ## Admin web
