@@ -7,8 +7,8 @@ JSON documents the ESP32 can parse, and publishes them retained:
   tubehax/online/release  latest Claude Code version, 14-day release strip, first changelog lines
   tubehax/online/usage    plan limits (5 hours, 7 days, Fable weekly), from the endpoint Claude Code's /usage uses
                           (undocumented, may change). Needs a full claude.ai login (user:profile scope): the
-                          homelab's own Claude Code login, read from ~/.claude/.credentials.json (mounted
-                          read-only). Claude Code renews that login; this service never writes it.
+                          homelab's own Claude Code login. This container only gets its short-lived access
+                          token (claude-usage-token.py copies it, cron); it never sees the refresh token.
 
 Runs next to Mosquitto on the homelab (docker-compose.yml). Contract: docs/DESIGN.md#mqtt-contract.
 """
@@ -147,7 +147,7 @@ def usage_token() -> str | None:
     except (OSError, ValueError, KeyError):
         return None
     if oauth.get("expiresAt", 0) / 1000 < time.time() + 60:
-        return None  # Claude Code renews it (see claude-keepalive in docker-compose.yml)
+        return None  # claude-usage-token.py has Claude Code renew it, then copies the new one
     return oauth.get("accessToken")
 
 

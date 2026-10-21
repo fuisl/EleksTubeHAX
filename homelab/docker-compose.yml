@@ -24,13 +24,15 @@ services:
     restart: unless-stopped
     depends_on: [mosquitto]
     env_file: feeds.env  # MQTT_USER / MQTT_PASSWORD, created on the homelab only (see README)
+    # Plan limits: only the short-lived access token of the homelab's Claude Code login, copied by
+    # claude-usage-token.py (cron). The folder is mounted so replaced files are seen; runs as the homelab
+    # user to read the 0600 file. The login itself (with its refresh token) stays outside the container.
+    user: "1000:1000"
     environment:
       MQTT_HOST: mosquitto
-    # Plan limits: the homelab's own Claude Code login, read-only. The folder (not the file) is mounted
-    # so renewals, which replace the file, are seen. Runs as the homelab user to read the 0600 file.
-    user: "1000:1000"
+      CLAUDE_CREDENTIALS: /secrets/claude-usage.json
     volumes:
-      - ${HOME}/.claude:/claude:ro
+      - ./secrets:/secrets:ro
     deploy:
       resources:
         limits:

@@ -49,7 +49,7 @@ Principles:
 | Overall status, components, open incident | `https://status.claude.com/api/v2/summary.json` | 2 min |
 | 30-day incident strip, last incident | `https://status.claude.com/api/v2/incidents.json` (last 50) | 10 min |
 | Claude Code version, release strip, first change | `https://api.github.com/repos/anthropics/claude-code/releases` | 15 min |
-| Plan limits (5 hours, 7 days, Fable weekly) | `https://api.anthropic.com/api/oauth/usage` (undocumented, used by Claude Code's `/usage`), `limits` list: `session`, `weekly_all`, `weekly_scoped` (model Fable). Authenticated with the homelab's own Claude Code login (read-only; `setup-token` tokens lack `user:profile`) | 5 min |
+| Plan limits (5 hours, 7 days, Fable weekly) | `https://api.anthropic.com/api/oauth/usage` (undocumented, used by Claude Code's `/usage`), `limits` list: `session`, `weekly_all`, `weekly_scoped` (model Fable). Authenticated with the homelab's own Claude Code login: cron (`claude-usage-token.py`) hands the container only the short-lived access token; `setup-token` tokens lack `user:profile` | 5 min |
 
 Not available without the Mac: what a session is doing (thinking, tools), its tokens and cost.
 
