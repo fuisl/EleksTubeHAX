@@ -499,7 +499,9 @@ Second, it parses the currently selected partition CSV to discover the offsets, 
 
 If you want to change the uploaded clock faces for the clock:
 
-* Create your own set of BMP files or select and copy some from the provided sets in the `assets/other graphics` subdirectory of this repo or download some from the internet (see below).
+* This fork ships a single face: the stock EleksTube nixie face, extracted from the original firmware. Its source JPEGs are in `assets/clockface_stock_nixie`; regenerate the BMPs with `uv run python tools/convert_stock_face.py`.
+
+* Create your own set of BMP files or download some from the internet (see below).
 
 * Maximum resolution of each image is 135 x 240 pixels (HxW). They can be smaller, then the picture will be centered on the display.
 
