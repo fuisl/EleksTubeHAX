@@ -49,7 +49,7 @@ Principles:
 | Overall status, components, open incident | `https://status.claude.com/api/v2/summary.json` | 2 min |
 | 30-day incident strip, last incident | `https://status.claude.com/api/v2/incidents.json` (last 50) | 10 min |
 | Claude Code version, release strip, first change | `https://api.github.com/repos/anthropics/claude-code/releases` | 15 min |
-| Plan limits (5 hours, 7 days, Fable weekly) | not public: needs the account's login. Display is ready (`tubehax/online/usage`), source to be decided | — |
+| Plan limits (5 hours, 7 days, Fable weekly) | `https://api.anthropic.com/api/oauth/usage` (undocumented, used by Claude Code's `/usage`) with a long-lived token from `claude setup-token`, set via `homelab/set-usage-token.sh` | 5 min |
 
 Not available without the Mac: what a session is doing (thinking, tools), its tokens and cost.
 
@@ -119,7 +119,7 @@ Prefix: `tubehax/`. JSON payloads, UTF-8. Timestamps are Unix epoch seconds (flo
 |---|---|---|---|
 | `tubehax/online/status` | feeds → clock | yes | `{"v":1,"indicator":"none\|minor\|major\|critical\|maintenance","description","components":[[name,status]…],"incident":{"name","impact","status","started"}\|null,"days":[30 × 0..3],"last_incident":{"name","at"}\|null,"fetched_at"}` (~420 B) |
 | `tubehax/online/release` | feeds → clock | yes | `{"v":1,"version","published_at","days":[14 × count],"notes":[…],"fetched_at"}` (~300 B) |
-| `tubehax/online/usage` | (not set up) → clock | yes | `{"five_hour":{"pct","resets_at"},"seven_day":{…},"model_week":{"name","pct","resets_at"},"fetched_at"}` |
+| `tubehax/online/usage` | feeds → clock (with a token) | yes | `{"five_hour":{"pct","resets_at"},"seven_day":{…},"model_week":{"name","pct","resets_at"},"fetched_at"}` |
 | `tubehax/clock/<id>/state` | clock → broker | yes | see [clock contract](#mqtt-contract-v1-clock) |
 | `tubehax/clock/<id>/cmd` | any → clock | no | see [clock contract](#mqtt-contract-v1-clock) |
 | `elekstubehax/<id>/status` | clock → broker | yes (LWT) | `online` / `offline` (Home Assistant availability topic, reused) |
