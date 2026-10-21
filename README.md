@@ -1,80 +1,34 @@
-# EleksTubeHAX - An aftermarket custom firmware for the desk clock
+# EleksTubeHAX - EleksTube IPS Pro edition
 
 ![EleksTube IPS clock](/docs/ImagesMD/EleksTube_IPS_Classic_Edition.jpg)
 
-#### This is the "Home Assistant Edition" with extendent MQTT support for Home Assistant, more info see below
+This is a personal fork of [aly-fly/EleksTubeHAX](https://github.com/aly-fly/EleksTubeHAX), the aftermarket custom firmware for IPS "nixie" desk clocks.
 
-## 1\. Supported hardware models
+Upstream supports many clock models and clones. **This fork targets only the EleksTube IPS Pro / Gen2 hardware**, and all code, build environments, docs and binaries for other models have been removed.
+If you own a different clock, use the upstream project instead.
 
-### 1.1 Original EleksTube Models
+All credit for the original firmware goes to the upstream authors (see "Main Contributors" below). The project remains licensed under the GPL (see [LICENSE](/LICENSE)).
 
-* **EleksTube IPS Clock (Original Version)**
+## 1\. Supported hardware
 
-* **EleksTube IPS Clock Gen2**
-
-  * incl. EleksTube IPS Classic Edition/Pro/PR1/PR2
-
-### 1.2 Other Supported Models
-
-* **SI HAI IPS Clock**
-
-* **Xunfeng IPS Clock**
-
-* **NovelLife SE Clock**
-
-  * With gesture sensor
-
-* **PunkCyber IPS Clock** f/k/a **RGB Glow Tube DIY Clock**
-
-* **IPSTube Clock - Model H401 and H402**
-
-  * With and without bottom LED stripe
-
-  * With and without hardware dimming
-
-* **MarvelTubes Clock**
-
-* **MarvelTubes Gen2 Clock**
-
-* **MarvelTubes Mini Clock** f/k/a **Marvel Tribe Mini**
-
-* **D'Esign Clock**
+* **EleksTube IPS Clock Gen2** (incl. EleksTube IPS Classic Edition/Pro/PR1/PR2)
+  * ESP32-PICO-D4, 4MB flash
+  * 6x ST7789 135x240 IPS displays, selected via a 74HC595 shift register
+  * 6x WS2812 RGB backlight LEDs
+  * 4 buttons (Left, Mode, Right, Power)
+  * DS3231 real-time clock with backup battery
 
 ##### Notes
-
-* **EleksTube IPS Clock** is the original model created by the inventor in 2021. There are now many similar designs and clones on the market with varying hardware modifications.
 
 * All "Original EleksTube" clocks sold after July 2022 are "Gen2" versions. Refer to the [Blog post on EleksTube website](https://EleksTube.com/blogs/news/instructions-on-EleksTube-clock-for-gen2-systems) for more details.
 
 * Newer versions from EleksTube, such as PR1 and PR2, Pro and special editions (Pink etc.), are based on the base Gen2 version and sometimes called Gen3, because the original firmware version is already at Version 3.x for them.
 
-* The "basic" version is now officially called "**EleksTube IPS Classic Edition**"
+## 2\. Mainboard/PCB view
 
-* In 2024, the IPSTube clocks became the cheapest and most widely available "clone" variant of the EleksTube clocks on the market. They are offered by a wide range of sellers and under many different names, but they all have the "IPSTube" logo printed on the front. Most listings include words like Nixie, Tube, Clock, LED, Light, RGB, IPS, and Glow in the description.
+EleksTube IPS - Gen2 (EleksTube IPS Classic Edition/Pro/PR1/PR2) ![EleksTube IPS clock - Gen2](/docs/ImagesMD/EleksTube_Gen2_PCB.jpg)
 
-* Since 2025, the MarvelTubes Gen2 is a production-cost-reduced variant of the MarvelTubes clock (retail price unchanged) — the MCU was changed from the ESP32-S2 to a standard ESP32 (no PSRAM), and the RTC chip and backup battery were omitted; the time is kept exclusively via NTP.
-
-### 1.3 Purchasing Information
-
-You can buy the "EleksTube IPS Clock" (or its clones) from eBay, Banggood, AliExpress, Amazon, the EleksTube website and other retailers.
-
-Ensure the seller has a good reputation and offers a kind of return guarantee to avoid purchasing fake products or being tricked.
-
-### 1.4 Firmware Compatibility
-
-* This firmware supports and has been tested on various clock models listed above.
-
-* If you discover a new clone or version of these types of clocks, please report it by creating an issue in the "Issues" section of the GitHub project. Provide as many details as possible to help expand compatibility.
-
-## 2\. Mainboard/PCB views
-
-EleksTube IPS - original Version - with hardware modification ![EleksTube IPS clock](/docs/ImagesMD/EleksTube_original_PCB.jpg) EleksTube IPS - Gen2 (EleksTube IPS Classic Edition/Pro/PR1/PR2) ![EleksTube IPS clock - Gen2](/docs/ImagesMD/EleksTube_Gen2_PCB.jpg) SI HAI IPS ![SI HAI IPS clock](/docs/ImagesMD/SI_HAI_ips_clock.jpg) Xunfeng IPS Clock ![Xunfeng IPS Clock](/docs/ImagesMD/Xunfeng_IPS_clock_PCB.jpg) NovelLife SE ![NovelLife SE clock](/docs/ImagesMD/NovelLife_SE.jpg) PunkCyber IPS ![PunkCyber / RGB Glow tube](/docs/ImagesMD/PunkCyber_IPS_clock_PCB.jpg) IPSTube - H401 ![IPSTube clock - Model H401](/docs/ImagesMD/IPSTUBE_H401_PCB.jpg) IPSTube - H402 ![IPSTube clock - Model H402](/docs/ImagesMD/IPSTUBE_H402_PCB.jpg)
-MarvelTubes ![MarvelTubes clock](/docs/ImagesMD/MarvelTubes_clock_PCB.jpg)
-MarvelTubes Gen2 ![MarvelTubes Gen2 clock](/docs/ImagesMD/MarvelTubes_Gen2_clock_PCB.jpg)
-MarvelTubes Mini ![MarvelTubes Mini clock](/docs/ImagesMD/MarvelTubesMini_clock_PCB.jpg)
-D'Esign Clock ![D-Esign clock](/docs/ImagesMD/D-Esign_PCB.jpg)
-
-For detailed pictures for most of the clocks see the `docs` subdirectory.
+For detailed pictures see the `docs/Hardware EleksTube Gen2` subdirectory.
 
 ## 3\. Main features
 
@@ -100,7 +54,7 @@ For detailed pictures for most of the clocks see the `docs` subdirectory.
 
 * Dimming of the displays and backlights during the night time (start and end time configurable in code)
 
-* Turning displays on and off (not supported on all clock versions)
+* Turning displays on and off
 
 * Keeping time even when power is off by using battery-powered real-time clock
 
@@ -149,89 +103,6 @@ Features:
   * Toggle 12/24-hour format
   * Enable/disable blank zeros
 
-### 3.2 Clock specific features
-
-Some clock models have specific functionalities or hardware specials which are only available for that model
-
-#### 3.2.1 NovelLife SE Clock with gesture sensor
-
-* No buttons on the clock, only a gesture sensor
-
-* Gesture sensor is supported by simulating the buttons like the other clocks have
-
-#### 3.2.2 IPSTube Clock - Model H401 and H402
-
-* This model has a 8MB flash memory, so either more clock faces can be stored on the clock or in a better quality (i.e. no palettization/conversion needed) or bigger size of the images.
-
-* Uses a dedicated PlatformIO environment (`IPSTube`) with the `partition_8MB.csv` layout and custom board definition found in `boards/`.
-
-##### 3.2.2.1 One button menu
-
-* The clock has only one button, so there is a special menu mode active for this model.
-
-##### 3.2.2.2 Color LED stripe
-
-* Some versions of this model have a LED stripe with 28 RGB LEDs installed on the bottom.
-
-##### 3.2.2.3 Dimmable displays
-
-* newer versions (after mid-2024) of the IPSTube clocks can do hardware dimming on the displays and turn off the displays completely
-
-Note: See "Known problems/Limitations" for more info.
-
-#### 3.2.3 MarvelTubes Clock
-
-* Ships with 16MB of flash, allocating a 2MB application slot and a large LittleFS partition so high-resolution or alternate clock faces rarely need recompression.
-
-* Uses an **ESP32-S2-WROVER** module with 16 MB flash and 2 MB PSRAM.
-
-* Hardware PWM dimming for the displays.
-
-* Uses a dedicated PlatformIO environment (`MarvelTubes`) with the `partition_16MB.csv` layout and custom board definition found in `boards/`.
-
-#### 3.2.3b MarvelTubes Gen2 Clock
-
-* Second-generation MarvelTubes clock with a standard **ESP32-WROOM-32E** module (not S2), 16 MB flash, no PSRAM, no RTC.
-
-* Hardware PWM dimming for the displays.
-
-* Uses a dedicated PlatformIO environment (`MarvelTubes_Gen2`) with the `partition_16MB.csv` layout and the custom board definition `esp32devmarveltubesgen2` found in `boards/`.
-
-#### 3.2.4 MarvelTubes Mini Clock
-
-* Compact version of the MarvelTubes clock with 6× **ST7735 80×160 px** IPS TFT displays on individual breakout boards.
-
-* Uses an **ESP32-C3-Mini-1** module with built-in USB Serial/JTAG — no external USB-UART chip (e.g. CH340).
-
-* Chip select lines, display reset and backlight power/dimming are all controlled via an **I2C IO expander** (address `0x19`) — no shift register, no direct GPIO CS.
-
-* Hardware brightness dimming is done through the IO expander register, not via PWM or software alpha blending.
-
-* No RTC or battery is included in the standard kit. Soldering pads for an I2C RTC are present on the PCB but unpopulated — time is kept exclusively via NTP.
-
-* Clock face images are automatically rescaled to 80×160 px during the build process by a pre-build script (`script_prepare_mini_clockfaces.py`).
-
-* Uses a dedicated PlatformIO environment (`MarvelTubesMini`) with the `partition_4MB.csv` layout and the custom board definition `esp32devc3minimarveltubesmini` found in `boards/`.
-
-* Uses a modified version of the `TFT_eSPI` library (stored in `lib/modified_TFT_eSPI`) for ESP32-C3 processor support and correct ST7735 80×160 display offsets.
-
-* Requires `monitor_dtr = 0` and `monitor_rts = 0` in PlatformIO to prevent unintended clock resets when opening or closing the serial monitor (the ESP32-C3 USB-CDC reacts to DTR/RTS signals).
-
-#### 3.2.5 D'Esign Clock
-
-* Custom-designed ESP32-based tube clock with 6× **ST7735S 80×160 px** IPS TFT displays on individual PCBs.
-
-* **No physical buttons** — replaced by two capacitive metal touch rings. Touch detection uses the ESP32 hardware `touchRead()` peripheral.
-
-* Two-ring touch menu: short tap = value change, long press right = next menu item, long press left = exit menu.
-
-* Hardware PWM dimming for the displays.
-
-* Active buzzer on GPIO21 (not used).
-
-* Clock face images are automatically rescaled to 80×160 px during the build process by a pre-build script (`script_prepare_mini_clockfaces.py`).
-
-* Uses a dedicated PlatformIO environment (`DEsign`) with the `partition_4MB.csv` layout.
 
 ## 4\. Quick Start - Backup and Pre-Build firmware images
 
@@ -269,7 +140,7 @@ So again: Do a backup of your original firmware first!
 
 #### 2) Save your original firmware
 
-To read from (or write to) the clock, it needs to be in the "download mode". Most clocks will go into this mode automatically, when the ESPTool tries to read or write to them. Some clocks needs a button pressed while the powering phase (plugging the USB cable), like the IPSTubes.
+To read from (or write to) the clock, it needs to be in the "download mode". The clock goes into this mode automatically when the ESPTool tries to read or write to it.
 
 ##### Windows users
 
@@ -277,7 +148,7 @@ To read from (or write to) the clock, it needs to be in the "download mode". Mos
 
 * Open Device Manager and find out which virtual COM port represents your clock.
 
-* Modify the backup script that matches your flash size (e.g. `_ESP32 save flash 4MB.cmd`, `_ESP32 save flash 8MB.cmd` for IPSTubes or `_ESP32 save flash 16MB.cmd` for MarvelTubes and MarvelTubes Gen2) with your COM port number.
+* Modify the backup script `_ESP32 save flash 4MB.cmd` with your COM port number.
 
 * Run the CMD file.
 
@@ -285,13 +156,17 @@ To read from (or write to) the clock, it needs to be in the "download mode". Mos
 
 * This is your precious backup!
 
-##### Linux users
+##### macOS / Linux users
 
-* You probably already know where to get `ESPTool` and how to use it. :)
+* After `uv sync` and a first build (see section 5), PlatformIO ships its own `esptool.py`. Read the whole 4MB flash with:
 
-* If not, this guide from the Tasmota project is very easy to follow: [ESPTool](https://tasmota.github.io/docs/Esptool/#put-device-in-firmware-upload-mode)
+  `uv run python ~/.platformio/packages/tool-esptoolpy/esptool.py --port /dev/cu.usbserial-XXXX --baud 460800 read_flash 0 0x400000 backup1.bin`
 
-* Adopt the settings for your connected clock and save the firmware file to your device.
+  (on Linux the port is something like `/dev/ttyUSB0`).
+
+* Reading twice and comparing the checksums (`shasum -a 256`) is a cheap way to make sure the backup is not corrupted.
+
+* Alternatively, this guide from the Tasmota project is very easy to follow: [ESPTool](https://tasmota.github.io/docs/Esptool/#put-device-in-firmware-upload-mode)
 
 ### 4.3 Use the pre-built firmware images
 
@@ -347,6 +222,19 @@ Unfortunately, it's not simple plug-and-play. You need to do some things.
 
 These instructions assume you already know how to use the **Visual Studio Code** and the **PlatformIO IDE** extension for it, and just need to know what to do.
 
+### 5.0 Command line build with uv
+
+The Python tooling (PlatformIO Core, Pillow for the image tools) is managed with [uv](https://docs.astral.sh/uv/) via `pyproject.toml`:
+
+```sh
+uv sync                                  # create .venv with PlatformIO
+cp "include/_USER_DEFINES - empty.h" include/_USER_DEFINES.h   # then edit it
+uv run pio run                           # build (default env: EleksTube_Gen2)
+uv run pio run -t upload                 # flash the app partition
+uv run pio run -t uploadfs               # flash the clock faces (LittleFS)
+uv run pio device monitor                # serial monitor
+```
+
 ### 5.1 Download the code
 
 You're either reading this file after downloading/cloning it already, or you're reading it on GitHub.
@@ -383,25 +271,16 @@ It is possible that the project also works with ESP32 platform modules from othe
 
 #### 5.3.2 PIO build environment
 
-The PIO build environments for this project are named after each clock (e.g. `EleksTube`) using the board definition of the original "Espressif ESP32 Dev Module" named `esp32dev`.
-
-##### Custom boards
-
-The IPSTube clocks need to use the `IPSTube` environment with a custom board definition named `esp32dev8MB` in the `boards` folder for its 8MB flash hardware and the slower flash chips.
-The MarvelTubes clock uses the `MarvelTubes` environment with the custom board definition `esp32devs2marveltubes` for its 16MB flash and ESP32-S2 hardware.
-The MarvelTubes Gen2 clock uses the `MarvelTubes_Gen2` environment with the custom board definition `esp32devmarveltubesgen2` for its 16MB flash and standard ESP32-based hardware.
-The MarvelTubes Mini clock uses the `MarvelTubesMini` environment with the custom board definition `esp32devc3minimarveltubesmini` for its ESP32-C3-based hardware.
-The Xunfeng clock uses the `Xunfeng` environment with the custom board definition `esp32devS2` for its ESP32-S2 hardware.
+The only PIO build environment of this fork is `EleksTube_Gen2` (also the default), using the board definition of the original "Espressif ESP32 Dev Module" named `esp32dev`.
 
 #### Partition sizes
 
-Flash partition size settings are already configured in the following files.
+Flash partition size settings are already configured in the following file.
 
 | filename | environment | flash size | app part size | data part size |
 | --- | --- | --- | --- | --- |
-| `partition_4MB.csv` | All clocks with 4MB flash | 4.0 MB | 1.2 MB | 2.8 MB |
-| `partition_8MB.csv` | IPSTube | 8.0 MB | 1.2 MB | 6.8 MB |
-| `partition_16MB.csv` | MarvelTubes, MarvelTubes Gen2 | 16.0 MB | 2.0 MB | 13.3 MB |
+| `partition_4MB.csv` | EleksTube_Gen2 | 4.0 MB | 1.2 MB | 2.8 MB |
+
 
 No OTA partition, one app partition, one data partition as LittleFS to store the images of the clock faces.
 
@@ -409,7 +288,7 @@ These CSV files are used by PlatformIO to create the partitions on the flash of 
 
 Upload port is set to 921600 baud in the `platformio.ini` file.
 
-**Note**: Some clocks do not support such high speed, if you have issues, reduce this to 460800 baud or even lower.
+**Note**: If you have upload issues, reduce this to 460800 baud or even lower.
 
 #### 5.3.3 Libraries in use
 
@@ -435,10 +314,6 @@ If you encounter issues with automatic installation, refer to the comments in `p
 | bodmer/TFT\_eSPI *(standard registry version replaced by modified local copy, see 5.3.3.4)* | Bodmer | 2.5.43 | [https://github.com/Bodmer/TFT\_eSPI](https://github.com/Bodmer/TFT_eSPI) |
 | knolleary/PubSubClient | Nick O'Leary | 2.8.0 | [https://www.arduinolibraries.info/libraries/pub-sub-client](https://www.arduinolibraries.info/libraries/pub-sub-client) |
 | bblanchon/ArduinoJson | Benoit Blanchon | 7.4.3 | [https://github.com/bblanchon/ArduinoJson.git](https://github.com/bblanchon/ArduinoJson.git) |
-| makuna/RTC | Michael C.Miller | 2.5.0 | [https://github.com/Makuna/Rtc/wiki](https://github.com/Makuna/Rtc/wiki) |
-
-**Notes**:
-`makuna/RTC` is only required for "SI HAI clock".
 
 ##### 5.3.3.3 Library Code Used
 
@@ -461,24 +336,14 @@ The modified versions are stored in the `lib` subdirectory.
 
 | Library | Author | Latest Version | Source Code Link |
 | --- | --- | --- | --- |
-| sparkfun/SparkFun APDS9960 RGB and Gesture Sensor | SparkFun | 1.4.3 | [https://github.com/sparkfun/SparkFun\_APDS-9960\_Sensor\_Arduino\_Library](https://github.com/sparkfun/SparkFun_APDS-9960_Sensor_Arduino_Library) |
-| (not listed in PIO registry) | Marcin Saj | 1.0.7 | [https://github.com/marcinsaj/RTC_RX8025T](https://github.com/marcinsaj/RTC_RX8025T) |
 | arduino-libraries/NTPClient | Arduino Libraries | 3.2.1 | [https://github.com/arduino-libraries/NTPClient](https://github.com/arduino-libraries/NTPClient) |
 | bodmer/TFT\_eSPI (modified) | Bodmer | 2.5.43 | [https://github.com/Bodmer/TFT\_eSPI](https://github.com/Bodmer/TFT_eSPI) |
 
-**Note:** The modified version of the `SparkFun APDS-9960` library is only required for the NovelLife SE clock (which includes a gesture sensor). It is always compiled **but not linked** for other clock variants.
-
-**Note:** The **MarvelTubes Mini** needs a **modified version of `TFT_eSPI`** stored in `lib/modified_TFT_eSPI/` instead of the standard library fetched from the PlatformIO registry. This modified version is used for **all clock environments** — the standard `bodmer/TFT_eSPI` entry in `platformio.ini` is intentionally commented out. The local modified copy is required for three reasons:
-
-1. **ESP32-C3 processor support** — adds the `TFT_eSPI_ESP32_C3.h` processor file with IDF-level bug fixes (missing definitions, renamed register references) that are not present in the current upstream release (2026-05-02).
-2. **ST7735 80×160 display offsets** — correct column offset (`colstart=26`) and row offset (`rowstart=1`) for the `ST7735_GREENTAB160x80` panel variant used in the Mini, preventing image shift on the display.
-3. **`User_Setup.h` via build script** — the library is pre-configured by the `script_configure_tft_lib.py` build script, which copies `GLOBAL_DEFINES.h` as `User_Setup.h` into the modified library folder before compilation.
-
-The `MarvelTubesMini` PlatformIO environment, like all other environments, references this local library path automatically via the `lib/` folder; the standard `bodmer/TFT_eSPI` from the PlatformIO registry is disabled.
+**Note:** A **modified version of `TFT_eSPI`** stored in `lib/modified_TFT_eSPI/` is used instead of the standard library fetched from the PlatformIO registry — the standard `bodmer/TFT_eSPI` entry in `platformio.ini` is intentionally commented out. The library is pre-configured by the `script_configure_tft_lib.py` build script, which copies `GLOBAL_DEFINES.h` as `User_Setup.h` into the modified library folder before compilation.
 
 #### 5.3.4 Configure the `TFT_eSPI` library
 
-The supplied `script_configure_tft_lib.py` automatically takes care of the library configuration. It copies two files (`_USER_DEFINES.h` and `GLOBAL_DEFINES.h`) into the `lib/modified_TFT_eSPI/` subdirectory before building. This makes sure that the modified local `TFT_eSPI` library is initialized with the correct values for each clock type.
+The supplied `script_configure_tft_lib.py` automatically takes care of the library configuration. It copies two files (`_USER_DEFINES.h` and `GLOBAL_DEFINES.h`) into the `lib/modified_TFT_eSPI/` subdirectory before building. This makes sure that the modified local `TFT_eSPI` library is initialized with the correct values for the clock.
 
 If you have issues with the scripts, copy the files manually every time the `TFT_eSPI` library is updated.
 
@@ -541,13 +406,13 @@ Connect the clock to your computer via a USB cable. You'll see, that a new seria
 
 PlatformIO will automatically select the right port for uploading (in most cases).
 
-Most clocks will go into to the download mode automatically, when PlatformIO is trying to upload the built firmware files. Some clocks needs a button pressed while the powering phase (plugging the USB cable), like the IPSTubes.
+The clock goes into the download mode automatically when PlatformIO is trying to upload the built firmware files.
 
 **Note**: If you have Bluetooth virtual ports on your machine, it might hang and you must manually select the COM port in the `platformio.ini`, see [Upload options](https://docs.platformio.org/en/latest/projectconf/sections/env/options/upload/index.html).
 
 #### 5.4.1 Step 1 - Compile the code and upload the firmware file (to the app partition)
 
-Compile the code via the "Build" command of PlatformIO extension for the clock environment you are using (e.g., EleksTube, EleksTube_Gen2, NovelLife, SI\_HAI, PunkCyber, IPSTube, MarvelTubes, MarvelTubes_Gen2, MarvelTubesMini or DEsign) and upload the code via the "Upload" command in the matching environment for your clock.
+Compile the code via the "Build" command of PlatformIO extension for the `EleksTube_Gen2` environment and upload the code via the "Upload" command (or use the `uv run pio` commands from section 5.0).
 
 ![PlatformIO Build](/docs/ImagesMD/PlatformIOBuild.png)
 
@@ -561,7 +426,7 @@ Example output from a successful upload:
 
 ![PlatformIO Upload Output](/docs/ImagesMD/PlatformIOUploadOutput.png)
 
-**Note**: On auto-reset clocks, you'll see the clock boot up after upload. It will go into the setup routine and ask for WPS or connecting to the configured WiFi network. On some clocks, you need to to a manual reset (power off/on cycle).
+**Note**: You'll see the clock boot up after upload. It will go into the setup routine and ask for WPS or connecting to the configured WiFi network.
 
 **Note**: After the initially flash, your clock will **NOT SHOW ANYTHING** on the displays after the setup phase! This is, because it doesn't have any bitmaps to display on the flash memory yet!
 
@@ -601,7 +466,7 @@ After Step 2 the clock should boot up and show the boot sequence on all displays
 
 Alternatively to build and uploading the app part and the data part in single steps, you can create a single firmware file, which is flashable all at once to the clock.
 
-You still need to define all the settings/features you want to use in the `USER_DEFINES.h`, especially your clock type.
+You still need to define all the settings/features you want to use in the `USER_DEFINES.h`.
 
 Additionally, you need to uncomment the line `-D CREATE_FIRMWAREFILE` in the platformio.ini to enable a post-build step, to create the image for your clock.
 
@@ -609,13 +474,13 @@ If you now build the project in PlatformIO via the "Build" command, the normal b
 
 The output file is written to the default output dir of the build. Usually the subdirectory `.pio\build\<environment name>` in the project directory.
 
-The firmware file will be named like `FW_<CLOCKNAME>_<VERSIONNUMBER>.bin` (e.g., `FW_EleksTube_v1.3.5.bin`).
+The firmware file will be named like `FW_<CLOCKNAME>_<VERSIONNUMBER>.bin` (e.g., `FW_EleksTube_Gen2_v1.3.13.bin`).
 
 This file can be flashed with the `esptool.exe` with the `write_flash` option.
 
 E.g. assuming you are using the `esptool.exe` in the `firmware` subdirectory and the clock is connected to COM5:
 
-`esptool.exe --chip esp32 --port COM5 --baud 921600 --before default_reset --after hard_reset write_flash 0x0000 ..\.pio\build\EleksTube\FW_EleksTube_v1.3.12.bin --erase-all`
+`esptool.exe --chip esp32 --port COM5 --baud 921600 --before default_reset --after hard_reset write_flash 0x0000 ..\.pio\build\EleksTube_Gen2\FW_EleksTube_Gen2_v1.3.13.bin --erase-all`
 
 ### 5.5.1 Helper scripts
 
@@ -627,21 +492,6 @@ First, it launches PlatformIO with the `buildfs` target for the active environme
 
 Second, it parses the currently selected partition CSV to discover the offsets, gathers the core images (bootloader, partitions, app) and the freshly built filesystem image, and then calls `python -m esptool merge-bin` (with a fallback to the legacy `merge_bin` syntax) to emit the unified firmware file.
 
-#### 5.5.1.2 Clock face image resizing (`script_prepare_mini_clockfaces.py`)
-
-This pre-build script is automatically executed by PlatformIO before compiling for clock environments that use 80×160 px displays (currently **MarvelTubes Mini** and **D'Esign**). It converts the clock face images in the `data` directory from the standard 135×240 px format used by full-size clocks to the 80×160 px target resolution of the smaller displays.
-
-**How it works:**
-
-1. It scans the `data` directory for all BMP and CLK clock face image files (matching the pattern `<digits>.<bmp|clk>`).
-2. Each source image is first centered on a virtual 135×240 px canvas (mirroring the runtime centering behavior of `DrawImage` in `TFTs.cpp`), then the canvas is scaled down to 80×160 px using nearest-neighbor resampling.
-3. The background color used to fill the virtual canvas (and any letterbox bars in `contain` mode) is not hardcoded black, but is automatically detected from the source image: the four corner pixels of the original image are sampled and the majority color among them is chosen as the background. This avoids visible seams when the clock face has a non-black border color.
-4. Two resize modes are supported (configured via the `RESIZE_MODE` variable at the top of the script):
-   * **`contain`** (default) — fits the image within the target dimensions, preserving the aspect ratio. Unused areas are filled with the detected background color.
-   * **`crop`** — fills the target completely by cropping equally from both sides of the longer axis (no bars, but edges are cut off).
-5. The resized images are written into a separate output directory used by the LittleFS filesystem image builder, so the original source files in `data` are never modified.
-
-Both BMP (including palettized variants) and CLK files are handled. The script requires Python 3 with no additional third-party packages beyond what PlatformIO already provides.
 
 ## 5.6 Miscellaneous stuff
 
@@ -783,10 +633,10 @@ Summary:
 Details:
 
 1. New device ID format and separator change:
-  The firmware now constructs a stable `device_id` from the model name plus the last three MAC‑address bytes (example: `elekstube-1a2b3c`). Discovery `unique_id`/`object_id` use underscores instead of slashes (e.g., `myclock123_front` instead of `myclock123/front`). Home Assistant treats changed `unique_id` values as new entities. After flashing a version with this scheme, delete obsolete entities in HA (Settings → Devices & Services → MQTT → device → three‑dot menu → Delete) and remove their retained discovery config topics so they do not reappear.
+  The firmware now constructs a stable `device_id` from the model name plus the last three MAC‑address bytes (example: `elekstubeg2-1a2b3c`). Discovery `unique_id`/`object_id` use underscores instead of slashes (e.g., `myclock123_front` instead of `myclock123/front`). Home Assistant treats changed `unique_id` values as new entities. After flashing a version with this scheme, delete obsolete entities in HA (Settings → Devices & Services → MQTT → device → three‑dot menu → Delete) and remove their retained discovery config topics so they do not reappear.
 
 2. New topics for status messages:
-  All runtime (non‑discovery) topics are published under the root `elekstubehax/<device_id>/...` using the lower‑case `device_id`. This yields unique, per‑device status and command channels (for example: `elekstubehax/elekstube-1a2b3c/front` and `/front/set`). If you previously subscribed to older topic paths, update any external scripts/dashboards. Consider deleting old retained status topics to avoid confusion when browsing.
+  All runtime (non‑discovery) topics are published under the root `elekstubehax/<device_id>/...` using the lower‑case `device_id`. This yields unique, per‑device status and command channels (for example: `elekstubehax/elekstubeg2-1a2b3c/front` and `/front/set`). If you previously subscribed to older topic paths, update any external scripts/dashboards. Consider deleting old retained status topics to avoid confusion when browsing.
 
 3. New topics for discovery messages:
   Each device now publishes exactly one discovery config per HA domain (light, number, switch) under the path `homeassistant/<domain>/elekstubehax/<device_id>/<entity>/config`. Paths include the lower‑case `device_id`. If retained configs from older paths exist, delete them to prevent ghost entities from reappearing in HA after restarts.
@@ -855,7 +705,7 @@ This firmware supports automated entity creation in Home Assistant via the MQTT 
 Key principles:
 
 - Root namespace for all runtime state and commands: `elekstubehax`
-- Per‑device path segment: lower‑cased unique device name – referred to as `device_id`. Format: `<model>-<XXYYZZ>` where `<model>` is the compile‑time `DEVICE_NAME` (e.g., `elekstube`, `elekstubegen2`, `ipstube`, `novellife`, `punkcyber`, `sihai`, `xunfeng`) and `<XXYYZZ>` are the last three bytes of the ESP32 MAC address in hexadecimal (bytes 3–5 of the canonical MAC). Example: `elekstube-1a2b3c`. This keeps IDs short while remaining sufficiently unique for typical home deployments.
+- Per‑device path segment: lower‑cased unique device name – referred to as `device_id`. Format: `<model>-<XXYYZZ>` where `<model>` is the compile‑time `DEVICE_NAME` (`elekstubeg2` for this fork) and `<XXYYZZ>` are the last three bytes of the ESP32 MAC address in hexadecimal (bytes 3–5 of the canonical MAC). Example: `elekstubeg2-1a2b3c`. This keeps IDs short while remaining sufficiently unique for typical home deployments.
 - Entity channel/topic keyword ("main", "back", "use_twelve_hours", "blank_zero_hours", "pulse_bpm", "breath_bpm", "rainbow_duration") – referred to as `entity_id`
 - Discovery identifiers (`unique_id` and `object_id`) now use underscore separators: `<device_id>_<entity_id>` (no slashes)
 - All state, attribute and command topics are JSON where applicable (schema `json` for lights) or key/value JSON for switches and numbers
@@ -896,14 +746,14 @@ Example discovery payload (front light) – abbreviated:
 
 ```json
 {
-  "unique_id": "elekstube-1a2b3c_main",
-  "object_id": "elekstube-1a2b3c_main",
+  "unique_id": "elekstubeg2-1a2b3c_main",
+  "object_id": "elekstubeg2-1a2b3c_main",
   "name": "Main",
   "schema": "json",
-  "availability_topic": "elekstubehax/elekstube-1a2b3c/alive",
-  "state_topic": "elekstubehax/elekstube-1a2b3c/main",
-  "json_attributes_topic": "elekstubehax/elekstube-1a2b3c/main",
-  "command_topic": "elekstubehax/elekstube-1a2b3c/main/set",
+  "availability_topic": "elekstubehax/elekstubeg2-1a2b3c/alive",
+  "state_topic": "elekstubehax/elekstubeg2-1a2b3c/main",
+  "json_attributes_topic": "elekstubehax/elekstubeg2-1a2b3c/main",
+  "command_topic": "elekstubehax/elekstubeg2-1a2b3c/main/set",
   "supported_color_modes": ["brightness"],
   "brightness": true,
   "effect": true,
@@ -997,116 +847,7 @@ You need to connect to the same MQTT broker like the clock and then will be able
 
 All MQTT messages from and to the clock are also traced out via the serial interface. So using a serial monitor while using the clock, gives also debug information. Make sure you enable the `DEBUG_OUTPUT_MQTT` before compilation and upload.
 
-## 6\. Known problems/limitations, Notes
-
-##### 6.1 Precision of the gesture sensor (NovelLife SE)
-
-The accuracy of the gesture sensor on the Novellife clock is not very good. It needs some 'training' to be able to control the clock.
-
-The defined gestures and there button equivalents are:
-
-| gesture | button |
-| --- | --- |
-| down, near | Power |
-| up, far | Mode |
-| left | Left |
-| right | Right |
-
-* The movement of the finger/hand from behind the glass tubes of the watch, over the glass tubes, directly and closely over the sensor to the front of the watch is the “down” gesture.
-
-* The movement of the finger/hand from in front of the watch, directly and closely over the sensor, further over the glass tubes and behind it is the “up” gesture.
-
-* The movement of the finger/hand starting left side from the sensor and moving over the sensor to the right side is the “right” gesture.
-
-* The movement of the finger/hand starting right side from the sensor and moving over the sensor to the left side is the “left” gesture.
-
-* Moving the finger/hand from directly above the sensor (from 5-8 cm away) toward the sensor (up to about 1 cm away) is the “near” gesture.
-
-* Moving from close by the sensor (coming from the front and putting the finger/hand in 1cm distance over the sensor) to a bit more far away (5-7cm distance) is the "far" gesture.
-
-##### 6.2 One button menu for IPSTube clocks
-
-The IPSTube clocks have only one button, so there are some limitations at the moment.
-
-* Short pressing the button brings up the menu.
-
-* Short pressing while in the menu changes the menu scope (next menu point).
-
-* Long pressing (at least 0.5 seconds) changes the value of the currently selected menu scope.
-
-This makes navigating through the menus a bit "unhandy." The values always change "to the right" because the long button press emulates a "right button" press in the menu. This limits the selection of values (e.g., for the absolute color values). The selection loops back to the first value after reaching the last value.
-
-##### 6.3 No real display turn-off or dimming for some IPSTube clocks
-
-Depending on the board version (PCB revision) of the IPSTube models (H401 and H402), transistor Q1 may or may not be present on the board.
-
-* If the transistor is present, the displays can be fully turned on and off like on other clocks, and hardware dimming is possible.
-
-* If the transistor is not present, the TFT LCDs cannot be turned on or off via software without modifying the hardware. Only software dimming (alpha blending) is available.
-
-It seems that only the early versions of the clocks lack the transistor. All versions seen after mid-2024 appear to have it.
-
-By default, the code assumes that the transistor is present and that the displays are dimmable. This will not damage your clock, even if the transistor is missing, but display dimming will be completely disabled!
-
-If the dimming is not working with your clock, you need to uncomment `-D HARDWAREMOD_IPSTUBE_CLOCK_WITHOUT_DIMMING_TRANSISTOR` in `platformio.ini` and rebuild and upload the firmware.
-
-See also the code comments for more info in the `GLOBAL_DEFINES.h` for the IPSTubes.
-
-##### 6.4 Slow digit refresh times for IPSTube clocks
-
-IPSTube clocks use slower Winbond flash chips that require conservative SPI settings (DIO mode at 40 MHz instead of QIO at 80 MHz). These slower flash chips provide only half the throughput of standard ESP32 flash memory, which results in slower loading times for the high-quality digit images and therefore slower display refresh rates compared to other clock models. Additionally, attempting to use QIO mode (quad I/O with four data lines which ARE connected on the PCB) or higher frequencies like 80 MHz (DIO or QIO) causes system instability with these chips.
-
-In normal operation this is barely noticeable, but becomes very apparent when multiple different digits need to be drawn simultaneously (cold load without prefetch).
-
-##### 6.5 LED strip on the bottom for some IPSTube clocks
-
-Some versions of the IPSTubes have a LED stripe with 28 RGB LEDs installed on the bottom.
-
-* The strip extends the six LEDs at the bottom of the LCDs, known as the "backlight".
-
-* Currently, the strip follows the backlight configuration (modes, colors, etc.).
-
-* All models have a 3-pin socket on the board, so theoretically, the strip can be retrofitted using any WS2812B-based LED strip with some modifications. However, the recess in the metal cover is missing, preventing the light from shining through.
-
-* By default, only six LEDs are set. To enable the full LED strip, uncomment `-D HARDWAREMOD_IPSTUBE_CLOCK_WITH_LED_STRIPE` in `platformio.ini` and rebuild and upload the firmware.
-
-##### 6.6 Xunfeng clocks
-
-The CyberPunk clocks identify themselves as "Xunfeng" when they start up with the original firmware. This suggests that the Xunfeng clock with the S2 chip and the CyberPunk clocks are made by the same company.
-
-##### 6.7 MarvelTubes: Missing WiFi antenna (UE module variant)
-
-Some MarvelTubes clocks are shipped with an **ESP32-S2 UE** module (the variant with an external antenna connector, U.FL/IPEX) instead of the standard module with a built-in PCB trace antenna. These clocks are delivered **without an antenna plugged in**, so the WiFi signal is extremely weak or completely unusable out of the box.
-
-If your MarvelTubes clock suffers from frequent WiFi disconnects or fails to connect at all, check whether the ESP32 module on the PCB has a small U.FL/IPEX coaxial connector socket. If it does, no antenna is attached.
-
-**Solution**: Purchase a suitable **IPEX (U.FL) WiFi antenna**. A flat/ribbon (FPC) antenna is recommended because it is thin enough to be routed and tucked inside the housing without requiring any case modification. Simply plug the antenna into the U.FL socket on the module.
-
-Without an antenna, expect very unreliable WiFi — repeated disconnects, failed NTP sync and MQTT dropouts are typical symptoms.
-
-##### 6.8 D'Esign clock: Two-ring touch menu operation
-
-The D'Esign clock has **no physical buttons**. Instead, two capacitive metal touch rings on the front act as left and right inputs using the ESP32 hardware `touchRead()` peripheral.
-
-Because there are only two inputs, the menu works differently from clocks with four buttons (Power, Mode, Left, Right):
-
-| Gesture | Action |
-| --- | --- |
-| Any short tap **release** (while clock is idle) | Opens the menu and jumps to the first menu item |
-| **LEFT** short tap | Decrements / changes the current value one step to the left |
-| **RIGHT** short tap | Increments / changes the current value one step to the right |
-| **RIGHT** long press (≥ 500 ms) | Advances to the next menu item |
-| **LEFT** long press (≥ 500 ms) while **in menu** | Exits the menu and returns to normal clock display |
-| **LEFT** long press (≥ 500 ms) while **idle** | Toggles displays and backlight on/off |
-| No interaction for a few seconds | Menu times out and closes automatically |
-
-**Tips**:
-
-* The menu opens on **release** of a short tap, not on press. This is intentional: it allows a LEFT long press (which fires after 500 ms, before any release event) to toggle display power without the menu ever opening. A long press releases via a distinct `up_long_edge` signal — not the `up_edge` that wakes the menu — so the two gestures never interfere.
-* Because there is no dedicated Power button, the display power is toggled via a **LEFT long press while idle** (same gesture as exiting the menu, but triggered when the menu is already closed).
-* If the touch rings react too sensitively or not at all, the threshold value `TOUCH_THRESHOLD` (default `25`) can be adjusted in `GLOBAL_DEFINES.h`. The idle reading is roughly 38–51 counts; a touched ring typically reads 4–8 counts.
-
-## 7\. Development Process/History
+## 6\. Development Process/History
 
 See [Old Readme File](/README_OLD.md) for details.
 
@@ -1114,118 +855,9 @@ See [Old Readme File](/README_OLD.md) for details.
 
 [Original documentation and software from EleksMaker.](https://wiki.eleksmaker.com/doku.php?id=ips)
 
-For EleksTube OV and SI HAI: Hardware pinout and notes are in the document `Hardware pinout.xlsx` in the `docs` subdirectory.
-
 There was an offical "manual" and software package avaiable for the original EleksTube clock. The website is not maintained anymore, so just for archive purpose: See [EleksTube instructions](https://wiki.eleksmaker.com/doku.php?id=ips).
 
-## 8\. Hardware modifications
-
-#### 8.1 PunkCyber IPS clock: No CH340 chip soldered on PCB of newer editions
-
-##### Problem
-
-**Short story**: CH340 chip is missing.
-
-**Long story**: The original version of the "PunkCyber IPS Clock" was buyable from PCBWay as "RGB Glow Tube DIY Clock" and is no longer available from there (see [PCBWay | RGB Glow Clock](https://www.pcbway.com/project/gifts_detail/RGB_Glow_Tube_Clock_907ad35c.html)). This version had a CH340 chip soldered and two USB-C ports, where the right one was working, to communicate with a PC via the USB-UART chip.
-
-The clock is still available to buy from other resellers. It is already assembled and in a box, sold as "PunkCyber IPS Clock".
-
-All these newer versions of the clock do NOT have the CH340 chip and the components for the "auto download mode circuit" soldered! Just empty soldering header. So both USB-C ports are only for giving power to the clock.
-
-A communication (like downloading or uploading firmware) is not possible easily without this chip!
-
-The original manufacturer has an 'interesting' way to update the firmware "over-the-air", by connecting your mobile phone to the Wifi-Access-Point of the clock and joining a WeChat channel and let them control the clock from there (see the discussion on the PCBWay site).
-
-##### Solution
-
-If you want to bring the EleksTubeHAX firmware to the clock, we need either to solder a CH340 chip and the transistors and resistors on there designated places, or use an "external" USB-UART bridge/board.
-
-Below the missing chip are some soldering headers:
-
-![PunkCyber / RGB Glow tube](/docs/ImagesMD/PunkCyber_PCB_CH340_header.jpg)
-
-##### Way 1 - External UART-USB adapter
-
-The "easiser" way is the external board solution IMO.
-
-BOOT is connected to GPIO0 (pin 25) on the ESP32 EN is connected to EN (pin 3) on the ESP32 G is connected to Ground (pins 1/38/15) on the ESP32 R is connected to GPIO1 / TxD (pin 35) on the ESP32 T is connected to GPIO3 / RxD (pin 34) on the ESP32
-
-So we just need to connect G on the PCB to Ground on the UART bridge/board R on the PCB to Rx on the UART bridge/board T on the PCB to Tx on the UART bridge/board
-
-| Pin PCB | Pin UART |
-| --- | --- |
-| G | GND |
-| R | Rx |
-| T | Tx |
-
-We also need a way to put the clock into the download mode, so we need some kind of a switch between left header of BOOT 1 (to ESP32) and right header of BOOT 1 (Ground).
-
-Best way is to solder "sockets" to the existing headers, so that there longer pin side is pointing downwards from the not printed side of the PCB. Reason is easy, there is enough space between the backplate and the PCB to leave them soldered on for re-usage and they are not visible from the upper side.
-
-Soldered sockets:
-
-![soldered sockets with backplate](/docs/ImagesMD/PunkCyber_soldered_sockets.jpg)
-
-Soldered sockets with backplate:
-
-![soldered sockets with backplate](/docs/ImagesMD/PunkCyber_soldered_sockets_with_backplate.jpg)
-
-BOOT needs to be shorted, while the USB-C cable is connected to one of the USB-C ports (while powering) and then released to go into the download mode.
-
-Normally, all USB-UART bridges/boards should work, but for me, the UART bridge mode of the Flipper Zero (STM chip) didn't work properly! I have no idea why.
-
-So I successfully used an old FT232 board, which was still flying around (with Mini-USB :)) to read/backup the original firmware and write the EleksTubeHAX version.
-
-To get one on your own, search for "USB to UART" on your favorite seller platform, like the ones with A from US or PRC. Costs should not exceed 2-7 EUR/USD.
-
-Working solution:
-
-![PunkCyber connected via FT232](/docs/ImagesMD/PunkCyber_connected_UART-USB_bridge_and_reset_button.jpg)
-
-Successful backup:
-
-![PunkCyber successfull backup](/docs/ImagesMD/PunkCyber_backup_successful.jpg)
-
-Thanks to @Fastdruid for finding a good way to overcome this problem! See [Issue 62](https://github.com/aly-fly/EleksTubeHAX/issues/62).
-
-##### Way 2 - Buy Missing Components and Solder Them
-
-**Components needed:**
-
-* 1× CH340C chip (SOP-16 package) - USB to UART converter
-* 2× 10k Ohm SMD resistors (0805 format) - for auto-download circuit
-* 2× 8050 transistors (SOT-23 package) - for auto-download circuit
-* 1× 4.7nF SMD capacitor (50V - 0805 format) - decoupling capacitor
-
-![PunkCyber Missing Components](/docs/ImagesMD/PunkCyber_PCB_CH340_components.jpg)
-
-**Soldering notes:**
-
-* All components are surface-mount (SMD) devices
-* Recommended tools:
-  * Solder paste
-  * Hot air soldering station
-* It is possible to solder these few components with a normal soldering iron and wire, but I would not recommend it.
-
-![PunkCyber Soldered Components](/docs/ImagesMD/PunkCyber_PCB_CH340_soldered.jpg)
-
-When properly soldered, the clock will be recognized as a virtual COM port when connected via USB-C to your computer.
-
-#### 8.2 EleksTube Gen1: 5V on CH340 and ESP32
-
-##### Problem
-
-The "Original Version" (Gen1) of the EleksTube clock has a few issues in the hardware design. Most notably, it forces 5V signals from the USB-UART chip into the ESP32, which is not happy about it. This is outside of the safe operating limits and significantly reduces the lifetime of the ESP32. Mine (from the original author) died because of this...
-
-##### Solution
-
-The CH340 chip, used for USB-UART conversion, can operate both on 5V and 3.3V. On the Gen1 board it is powered by 5V. We can switch it to 3.3V. Cut one trace on the bottom side of the board that supplies the chip with 5V and route the 3.3V over the resistors / capacitors to VDD and VREF of the CH340.
-
-![EleksStube Gen1 hardware modification](/docs/ImagesMD/EleksTube_IPS_CH340C_mod.jpg)
-
-Note: This problem does not appear on Gen2 hardware from EleksTube! All clocks sold today (Autumn 2024) do not require any hardware modification!
-
-## 9\. Main Contributors
+## 7\. Main Contributors
 
 * Mark Smith, aka Smitty ... @SmittyHalibut on GitHub, Twitter, and YouTube.
 
