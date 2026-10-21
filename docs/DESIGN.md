@@ -179,6 +179,15 @@ The homelab (`fuisl`, Ubuntu 24.04, LAN `192.168.1.13`, NetBird `100.82.196.126`
 - LAN only for now: the clock connects to `192.168.1.13:1883`. `fuisl` resolves through NetBird on the Mac; other LAN devices use `fuisl.local` or the IP.
 - Passwords are generated per client, kept on the homelab in `homelab/mosquitto/passwd` (not in git) and on the Mac in `~/.config/tubehax/broker.env` (mode 600). Add or rotate with `homelab/add-user.sh <user>`.
 
+### Security (audit 2026-10-21)
+
+The homelab (Ubuntu 24.04) is also a shared GPU box (k3s, Slurm, other accounts). Findings and actions:
+
+- **Internet exposure:** it has a public IPv6 address, but no failed SSH logins in 7 days suggests the router blocks inbound traffic. Not verified from outside.
+- **SSH** (`homelab/harden-ssh.sh`, run with sudo, 10-minute auto-rollback until confirmed): port 22 only from loopback, NetBird (`wt0`) and the LAN (192.168.1.0/24); everything else gets a TCP reset (own nftables table, other rules untouched). Keys only, no X11 forwarding.
+- **Still open (recommended):** install the 4 pending security updates; `PermitRootLogin no`; bind Mosquitto 1883/9001 to the LAN and NetBird only (the clock needs the LAN); review the k3s API 6443 / kubelet 10250 / Slurm 6817-6818 listeners on all interfaces (all authenticated); UFW stays off because enabling it needs k3s/Docker-aware rules; membership in `docker` is root-equivalent.
+- **Claude login on the homelab:** whoever gets into the `fuisloy` account can use it (see Claude data sources). The feeds container only gets the short-lived access token.
+
 ## Admin web
 
 A small control page at `http://fuisl:9001/` for operating the clock from any browser — the clock's "admin panel".
