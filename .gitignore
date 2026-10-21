@@ -41,3 +41,6 @@ include/_USER_DEFINES.h
 
 # Python virtual environment (uv).
 .venv
+
+# Personal firmware backups (MAC-locked, never commit).
+backups/
