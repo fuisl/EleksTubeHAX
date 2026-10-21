@@ -116,18 +116,17 @@
     </section>
 
     <section>
-      <h2>Claude <span id="c-bridge" style="text-transform:none;letter-spacing:0"></span></h2>
+      <h2>Claude <span id="c-fetched" style="text-transform:none;letter-spacing:0"></span></h2>
       <div class="row" style="align-items:baseline;gap:14px">
-        <b id="c-state" style="font-size:22px;color:var(--muted)">no data</b>
-        <span id="c-tool" style="color:var(--text)"></span>
-        <span id="c-timer" style="margin-left:auto;font-size:22px;color:var(--accent);font-variant-numeric:tabular-nums"></span>
+        <b id="c-state" style="font-size:22px;color:var(--muted)">no feed</b>
+        <span id="c-components" style="color:var(--muted);font-size:13px"></span>
       </div>
-      <div id="c-model" style="color:var(--muted);font-size:13px;margin:4px 0 12px"></div>
+      <div id="c-incident" style="color:var(--text);font-size:13px;margin:6px 0 12px"></div>
       <div class="grid">
-        <div class="kv"><span>5-hour window</span><b id="c-5h">–</b></div>
-        <div class="kv"><span>7-day window</span><b id="c-7d">–</b></div>
-        <div class="kv"><span>context</span><b id="c-ctx">–</b></div>
-        <div class="kv"><span>session</span><b id="c-cost">–</b></div>
+        <div class="kv"><span>5-hour</span><b id="c-5h">–</b></div>
+        <div class="kv"><span>7-day</span><b id="c-7d">–</b></div>
+        <div class="kv"><span id="c-model-label">Fable weekly</span><b id="c-mw">–</b></div>
+        <div class="kv"><span>Claude Code</span><b id="c-version">–</b></div>
       </div>
     </section>
 
@@ -144,7 +143,6 @@
         <label>Day from <select name="day_start"></select></label>
         <label>Night backlight <span><input type="range" name="night_backlight" min="0" max="7"> <output></output></span></label>
         <label>Night displays <span><input type="range" name="night_tft" min="5" max="255"> <output></output></span></label>
-        <label>Jump to Claude when it needs you <input type="checkbox" name="auto_claude"></label>
       </form>
       <div class="row" style="margin-top:14px"><button id="settings-save" class="primary">Save</button><span id="settings-msg" style="color:var(--muted);font-size:13px"></span></div>
     </section>
@@ -178,7 +176,7 @@
   };
 
   let client = null, clockId = null, state = null, online = null;
-  const claude = { state: null, metrics: null, limits: null, bridge: null };
+  const feeds = { status: null, release: null, usage: null }; // tubehax/online/* from homelab/feeds
   let base = null; // {remaining, at}: countdown extrapolation base (performance.now() ms)
 
   function connect(user, pass) {
@@ -224,11 +222,9 @@
       const left = packet.retain && cd.ends_at ? cd.ends_at - Date.now() / 1000 : cd.remaining;
       base = { remaining: Math.max(0, left || 0), at: performance.now() };
       render();
-    } else if ((m = topic.match(/^tubehax\/claude\/(state|metrics|limits)$/))) {
-      try { claude[m[1]] = JSON.parse(text); } catch {}
-      renderClaude();
-    } else if (topic === 'tubehax/bridge/status') {
-      claude.bridge = text; renderClaude();
+    } else if ((m = topic.match(/^tubehax\/online\/(status|release|usage)$/))) {
+      try { feeds[m[1]] = text ? JSON.parse(text) : null; } catch {}
+      renderOnline();
     } else if ((m = topic.match(/^elekstubehax\/([^/]+)\/status$/))) {
       if (!clockId || clockId === m[1]) { online = text === 'online'; render(); }
     }
@@ -278,29 +274,35 @@
     tick();
   }
 
-  const COLORS = { working: 'var(--accent)', waiting: '#e8a33d', done: 'var(--ok)' };
-  function renderClaude() {
-    const st = claude.state, me = claude.metrics, li = claude.limits;
-    $('c-bridge').textContent = claude.bridge ? `· bridge ${claude.bridge}` : '';
-    $('c-bridge').style.color = claude.bridge === 'online' ? 'var(--ok)' : 'var(--bad)';
+  const HEALTH = { operational: 'var(--ok)', degraded_performance: '#f4c04a', partial_outage: '#e5533d', major_outage: '#e5533d', under_maintenance: '#f4c04a' };
+  const agoText = (t) => { const s = Date.now() / 1000 - t, d = Math.floor(s / 86400), h = Math.floor(s / 3600);
+                           return d >= 2 ? `${d}d ago` : h >= 1 ? `${h}h ago` : `${Math.max(1, Math.floor(s / 60))}m ago`; };
+  const untilText = (t) => { const s = Math.max(0, t - Date.now() / 1000), d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, mi = Math.floor(s / 60) % 60;
+                             return d ? `${d}d ${h}h` : `${h}h ${mi}m`; };
+  function renderOnline() {
+    const st = feeds.status, rel = feeds.release, us = feeds.usage;
     if (st) {
-      $('c-state').textContent = st.state;
-      $('c-state').style.color = COLORS[st.state] || 'var(--muted)';
-      $('c-tool').textContent = st.state === 'working' && st.tool ? st.tool : '';
-      $('c-model').textContent = [st.model, st.project, st.sessions > 1 ? `${st.sessions} sessions` : ''].filter(Boolean).join(' · ');
+      $('c-state').textContent = st.description;
+      $('c-state').style.color = st.indicator === 'none' ? 'var(--accent)' : '#f4c04a';
+      const up = st.components.filter(([, s]) => s === 'operational').length;
+      $('c-components').innerHTML = `${up}/${st.components.length} up `;
+      for (const [name, s] of st.components) {
+        const dot = document.createElement('span');
+        dot.title = `${name}: ${s.replace(/_/g, ' ')}`;
+        dot.style.cssText = `display:inline-block;width:9px;height:9px;margin-left:4px;background:${HEALTH[s] || 'var(--muted)'}`;
+        $('c-components').append(dot);
+      }
+      $('c-incident').textContent = st.incident ? `Now: ${st.incident.name} (${st.incident.status})`
+        : st.last_incident ? `Last incident ${agoText(st.last_incident.at)}: ${st.last_incident.name}` : '';
+      $('c-fetched').textContent = '· status.claude.com';
+      $('c-fetched').style.color = 'var(--muted)';
     }
-    const until = (t) => { const s = Math.max(0, t - Date.now() / 1000), d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, mi = Math.floor(s / 60) % 60;
-                           return d ? `${d}d ${h}h` : h ? `${h}h ${mi}m` : `${mi}m`; };
-    for (const [key, id] of [['five_hour', 'c-5h'], ['seven_day', 'c-7d']]) {
-      const w = li && li[key];
-      $(id).textContent = w && w.pct != null ? `${Math.round(w.pct)}% · resets in ${until(w.resets_at)}` : '–';
+    for (const [key, id] of [['five_hour', 'c-5h'], ['seven_day', 'c-7d'], ['model_week', 'c-mw']]) {
+      const w = us && us[key];
+      $(id).textContent = w && w.pct != null ? `${Math.round(w.pct)}% · resets in ${untilText(w.resets_at)}` : 'not connected';
+      if (key === 'model_week' && w && w.name) $('c-model-label').textContent = `${w.name} weekly`;
     }
-    const size = me && me.ctx_size >= 1e6 ? `${me.ctx_size / 1e6}M` : me ? `${Math.round(me.ctx_size / 1000)}K` : '';
-    $('c-ctx').textContent = me ? `${Math.round(me.ctx_pct)}% of ${size}` : '–';
-    const hours = me ? `${Math.floor(me.duration_ms / 3600000)}h ${Math.floor(me.duration_ms / 60000) % 60}m` : '';
-    $('c-cost').textContent = !me ? '–' : me.cost_usd != null
-      ? `$${me.cost_usd.toFixed(2)} · +${me.lines_added} −${me.lines_removed} · ${hours}`
-      : `${Math.round(me.tokens_out / 1000)}K out · ${hours}`;
+    $('c-version').textContent = rel ? `v${rel.version} · ${agoText(rel.published_at)}` : '–';
   }
 
   // Settings form: filled from the clock's state until the user edits it.
@@ -323,7 +325,7 @@
   }
   function fillSettings(st) {
     if (formDirty || !st) return;
-    for (const k of ['twelve_hour', 'blank_hours_zero', 'dimming', 'auto_claude']) form[k].checked = !!st[k];
+    for (const k of ['twelve_hour', 'blank_hours_zero', 'dimming']) form[k].checked = !!st[k];
     for (const k of ['backlight_intensity', 'night_backlight', 'night_tft', 'night_start', 'day_start']) form[k].value = st[k];
     form.utc_offset_h.value = st.utc_offset_min / 60;
     form.backlight_color.value = hex(st.backlight_rgb);
@@ -335,7 +337,7 @@
       twelve_hour: form.twelve_hour.checked, blank_hours_zero: form.blank_hours_zero.checked,
       utc_offset_min: Math.round(v('utc_offset_h') * 4) * 15, dimming: form.dimming.checked,
       night_start: v('night_start'), day_start: v('day_start'), night_backlight: v('night_backlight'),
-      night_tft: v('night_tft'), backlight_intensity: v('backlight_intensity'), auto_claude: form.auto_claude.checked,
+      night_tft: v('night_tft'), backlight_intensity: v('backlight_intensity'),
       ...(form.backlight_color.value !== hex(state.settings.backlight_rgb) ? { backlight_hue: hue(form.backlight_color.value) } : {}),
     } });
     formDirty = false;
@@ -343,12 +345,6 @@
   });
 
   function tick() {
-    const st = claude.state;
-    if (st && st.work_started) {
-      const end = st.work_ended || Date.now() / 1000, s = Math.max(0, Math.floor(end - st.work_started));
-      const p = (n) => String(Math.floor(n)).padStart(2, '0');
-      $('c-timer').textContent = s >= 3600 ? `${p(s / 3600)}:${p((s / 60) % 60)}:${p(s % 60)}` : `${p(s / 60)}:${p(s % 60)}`;
-    }
     if (!state) return;
     const cd = state.countdown, running = cd.state === 'running';
     const t = cd.state === 'done' ? 0 : currentRemaining();

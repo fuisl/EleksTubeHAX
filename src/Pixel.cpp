@@ -40,14 +40,14 @@ namespace Pixel
   {
     uint16_t c = color(fg);
     int16_t block = scale >= 4 ? scale - 1 : scale; // Gap between blocks gives the pixel-matrix look
-    tfts.fillRect(x, y, textWidth(s, scale), 7 * scale, TFT_BLACK);
+    tfts.fillRect(x, y, textWidth(s, scale), 8 * scale, TFT_BLACK);
     for (; *s; s++, x += 6 * scale)
     {
       uint8_t ch = uint8_t(*s);
       for (uint8_t col = 0; col < 5; col++)
       {
         uint8_t bits = font[ch * 5 + col];
-        for (uint8_t row = 0; row < 7; row++)
+        for (uint8_t row = 0; row < 8; row++) // Row 7: descenders (g, p, y)
           if (bits & (1 << row))
             tfts.fillRect(x + col * scale, y + row * scale, block, block, c);
       }
@@ -56,8 +56,61 @@ namespace Pixel
 
   void textCentered(int16_t y, const char *s, uint8_t scale, uint32_t fg)
   {
-    tfts.fillRect(0, y, WIDTH, 7 * scale, TFT_BLACK);
+    tfts.fillRect(0, y, WIDTH, 8 * scale, TFT_BLACK);
     text((WIDTH - textWidth(s, scale)) / 2, y, s, scale, fg);
+  }
+
+  int16_t textWrapped(int16_t x, int16_t y, int16_t w, const char *s, uint8_t scale, uint32_t fg, uint8_t max_lines,
+                      bool center)
+  {
+    const size_t per_line = (w + scale) / (6 * scale);
+    char line[48];
+    const char *p = s;
+    for (uint8_t n = 0; n < max_lines && *p; n++)
+    {
+      while (*p == ' ')
+        p++;
+      size_t len = strnlen(p, per_line + 1);
+      if (len > per_line)
+      { // Break at the last space that fits, or hard-break a long word
+        len = per_line;
+        for (size_t i = per_line; i > 0; i--)
+          if (p[i] == ' ')
+          {
+            len = i;
+            break;
+          }
+      }
+      len = min(len, sizeof(line) - 1);
+      memcpy(line, p, len);
+      line[len] = 0;
+      p += len;
+      bool more = *p != 0 && n == max_lines - 1;
+      if (more) // Cut: mark it
+      {
+        size_t keep = min(len, per_line - 2);
+        line[keep] = line[keep + 1] = '.';
+        line[keep + 2] = 0;
+      }
+      int16_t lx = center ? x + (w - textWidth(line, scale)) / 2 : x;
+      text(lx, y, line, scale, fg);
+      y += 9 * scale;
+    }
+    return y;
+  }
+
+  void art(int16_t x, int16_t y, uint8_t cell, const char *const *rows, uint8_t row_count, const Ink *inks,
+           uint8_t ink_count)
+  {
+    for (uint8_t r = 0; r < row_count; r++)
+      for (uint8_t c = 0; rows[r][c]; c++)
+      {
+        uint32_t rgb = BLACK;
+        for (uint8_t i = 0; i < ink_count; i++)
+          if (inks[i].key == rows[r][c])
+            rgb = inks[i].color;
+        tfts.fillRect(x + c * cell, y + r * cell, cell, cell, rgb == BLACK ? TFT_BLACK : color(rgb));
+      }
   }
 
   void gauge(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t segments, float fraction, uint32_t fg, bool vertical)
@@ -116,13 +169,13 @@ namespace Pixel
     }
   }
 
-  void Spinner::draw(int16_t y, uint8_t frame, uint32_t fg, bool force)
+  void Spinner::draw(int16_t y, uint8_t frame, uint32_t fg, bool force, uint8_t cell)
   {
     uint8_t grid[11][11];
     rasterize(frame, grid);
     force = force || fg != shown_color;
     uint16_t on = color(fg);
-    const int16_t cell = 11, x0 = (WIDTH - 11 * cell) / 2;
+    const int16_t x0 = (WIDTH - 11 * cell) / 2;
     for (uint8_t gy = 0; gy < 11; gy++)
       for (uint8_t gx = 0; gx < 11; gx++)
         if (force || grid[gy][gx] != shown[gy][gx])

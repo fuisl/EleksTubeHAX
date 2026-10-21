@@ -58,7 +58,6 @@ namespace
       {"night_tft", 0, 255},
       {"backlight_intensity", 0, 7},
       {"backlight_hue", 0, 359},
-      {"auto_claude", 0, 1},
   };
   const uint32_t SAVE_DELAY_MS = 2000; // Several settings in a row cause one flash write
   uint32_t save_due = 0;
@@ -119,8 +118,6 @@ namespace
       backlights.setIntensity(v);
     else if (strcmp(key, "backlight_hue") == 0)
       backlights.setColorPhase(backlights.hueToPhase(float(v)));
-    else if (strcmp(key, "auto_claude") == 0)
-      c.display.auto_claude = v;
     save_due = millis() + SAVE_DELAY_MS;
     SettingsChanged();
   }
@@ -217,7 +214,6 @@ namespace
     settings["night_tft"] = c.display.night_tft;
     settings["backlight_intensity"] = c.backlights.intensity;
     settings["backlight_rgb"] = backlights.getColor();
-    settings["auto_claude"] = c.display.auto_claude;
     doc["ip"] = WiFi.localIP().toString();
     doc["rssi"] = WiFi.RSSI();
     doc["ch"] = WiFi.channel();

@@ -73,7 +73,7 @@ public:
       uint8_t day_start;       // Hour (local) the day starts
       uint8_t night_backlight; // Backlight intensity at night, 0..7
       uint8_t night_tft;       // Display brightness at night, 0..255
-      bool auto_claude;        // Jump to Claude mode when Claude needs you or finishes
+      bool reserved;           // Was auto_claude; kept so the saved layout doesn't change
       uint8_t is_valid;        // Write StoredConfig::valid here when valid data is loaded.
     } display;
   } config;

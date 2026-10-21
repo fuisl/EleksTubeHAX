@@ -5,5 +5,5 @@ set -euo pipefail
 HOST="${TUBEHAX_HOST:-homelab-local}"
 DEST="${TUBEHAX_DEST:-tubehax}"
 cd "$(dirname "$0")"
-rsync -a --exclude passwd ./ "$HOST:$DEST/"
+rsync -a --exclude passwd --exclude feeds.env ./ "$HOST:$DEST/"
 ssh "$HOST" "cd $DEST && { [ -e mosquitto/passwd ] || touch mosquitto/passwd; } && docker compose up -d && docker compose ps"

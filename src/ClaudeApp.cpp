@@ -1,60 +1,64 @@
 #include "ClaudeApp.h"
 #include <TimeLib.h>
-#include "Backlights.h"
-#include "CountdownApp.h"
-#include "StoredConfig.h"
+#include "Clock.h"
 #include "TFTs.h"
-
-extern CountdownApp countdownApp; // main.cpp
-extern StoredConfig stored_config;
-
-static const uint32_t AUTO_SHOW_MS = 60000;
 
 // Tubes from the left: 1 = HOURS_TENS ... 6 = SECONDS_ONES
 static const uint8_t TUBE1 = HOURS_TENS, TUBE2 = HOURS_ONES, TUBE3 = MINUTES_TENS, TUBE4 = MINUTES_ONES,
                      TUBE5 = SECONDS_TENS, TUBE6 = SECONDS_ONES;
-static const uint8_t NIXIE_TUBES[] = {TUBE2, TUBE3, TUBE4, TUBE5, TUBE6};
+
+static const uint32_t VERB_MS = 9000;    // A new verb this often
+static const uint32_t STALE_S = 2 * 3600; // No feed update for this long: say so (it republishes hourly)
+
+// Claude Code's spinner verbs (a selection).
+static const char *const VERBS[] = {
+    "Thinking", "Crunching", "Combobulating", "Pondering", "Cogitating", "Noodling", "Percolating",
+    "Ruminating", "Simmering", "Brewing", "Conjuring", "Mulling", "Musing", "Vibing", "Clauding",
+    "Spelunking", "Synthesizing", "Marinating", "Finagling", "Reticulating", "Cerebrating", "Hatching",
+    "Forging", "Tinkering", "Whirring", "Moseying", "Schlepping", "Smooshing", "Stewing", "Honking"};
 
 static uint32_t utcNow()
 {
   return timeStatus() == timeNotSet ? 0 : uint32_t(now());
 }
 
-static uint32_t scaleColor(uint32_t color, float f)
+// "5M AGO", "3H AGO", "2D AGO"
+static String ago(uint32_t then)
 {
-  uint8_t r = ((color >> 16) & 0xFF) * f, g = ((color >> 8) & 0xFF) * f, b = (color & 0xFF) * f;
-  return (uint32_t(r) << 16) | (uint32_t(g) << 8) | b;
-}
-
-// 123456 -> "123K", 1234567 -> "1.2M"
-static String shortCount(uint32_t n)
-{
+  uint32_t t = utcNow();
+  if (then == 0 || t < then)
+    return "";
+  uint32_t s = t - then;
   char buf[12];
-  if (n >= 1000000)
-    snprintf(buf, sizeof(buf), "%.1fM", n / 1e6);
-  else if (n >= 10000)
-    snprintf(buf, sizeof(buf), "%luK", (unsigned long)(n / 1000));
-  else if (n >= 1000)
-    snprintf(buf, sizeof(buf), "%.1fK", n / 1e3);
+  if (s < 3600)
+    snprintf(buf, sizeof(buf), "%luM AGO", (unsigned long)max(s / 60, uint32_t(1)));
+  else if (s < 48 * 3600)
+    snprintf(buf, sizeof(buf), "%luH AGO", (unsigned long)(s / 3600));
   else
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)n);
+    snprintf(buf, sizeof(buf), "%luD AGO", (unsigned long)(s / 86400));
   return buf;
 }
 
-static String upper(const char *s, size_t max_len)
+static uint32_t healthColor(OnlineData::Health h)
 {
-  String out(s);
-  out.toUpperCase();
-  return out.length() > max_len ? out.substring(0, max_len) : out;
+  switch (h)
+  {
+  case OnlineData::ok:
+    return Pixel::ORANGE;
+  case OnlineData::minor:
+  case OnlineData::maintenance:
+    return Pixel::AMBER;
+  default:
+    return Pixel::RED;
+  }
 }
 
 void ClaudeApp::enter()
 {
   tfts.show_status_overlays = false;
-  tfts.preload_position = TUBE6;
-  tfts.preload_step = 1;
   force_next = true;
-  draw(true);
+  if (verb_since == 0)
+    pickVerb();
 }
 
 bool ClaudeApp::needsDraw(uint8_t tube, const String &signature, bool force)
@@ -63,331 +67,312 @@ bool ClaudeApp::needsDraw(uint8_t tube, const String &signature, bool force)
     return false;
   drawn[tube] = signature;
   Pixel::begin(tube);
+  Pixel::clear();
   return true;
 }
 
-void ClaudeApp::nixie(uint8_t tube, int16_t value, bool force)
+void ClaudeApp::pickVerb()
 {
-  drawn[tube] = "";
-  tfts.setDigit(tube, value < 0 ? TFTs::blanked : uint8_t(value % 10), force ? TFTs::force : TFTs::yes);
+  const char *next;
+  do
+    next = VERBS[random(sizeof(VERBS) / sizeof(VERBS[0]))];
+  while (next == verb);
+  verb = next;
+  verb_since = millis();
+  clawd.lookRight(); // Clawd glances at the new word
 }
 
 void ClaudeApp::loop()
 {
-  draw(force_next);
+  bool force = force_next;
   force_next = false;
-  updateBacklights();
+  if (OnlineDataVersion() != data_version)
+  {
+    data_version = OnlineDataVersion();
+    OnlineDataGet(data);
+  }
+  draw(force);
 }
 
 void ClaudeApp::draw(bool force)
 {
-  ClaudeDataGet(data);
-  tfts.preload_step = page == plan ? -1 : 1; // Seconds count down to the reset, up everywhere else
-  switch (page)
+  drawClawd(force);
+  drawVerb(force);
+  drawTime(force);
+  drawStatus(force);
+  drawHistory(force);
+  drawRelease(force);
+}
+
+void ClaudeApp::drawClawd(bool force)
+{
+  if (needsDraw(TUBE1, "clawd", force))
   {
-  case live:
-    drawLive(force);
-    break;
-  case plan:
-    drawPlan(force);
-    break;
-  case context:
-    drawContext(force);
-    break;
-  default:
-    drawSession(force);
-    break;
+    clawd.redraw();
+    Pixel::textCentered(206, "CLAUDE", 3, Pixel::ORANGE_DIM);
+  }
+  else
+    tfts.selectCustom(TUBE1);
+  Clawd::Mood mood = tfts.dimming < 255                                     ? Clawd::sleepy
+                     : data.has_incident || data.indicator != OnlineData::ok ? Clawd::worried
+                                                                             : Clawd::normal;
+  clawd.update(millis(), mood);
+}
+
+void ClaudeApp::drawVerb(bool force)
+{
+  uint32_t ms = millis();
+  // During an incident, show what Anthropic is doing about it instead of a playful verb.
+  const char *word = verb;
+  uint32_t color = Pixel::ORANGE;
+  if (data.has_incident)
+  {
+    const char *s = data.incident_status;
+    word = strcmp(s, "identified") == 0 ? "Fixing" : strcmp(s, "monitoring") == 0 ? "Monitoring"
+                                                                                    : "Investigating";
+    color = Pixel::AMBER;
+  }
+  else if (ms - verb_since > VERB_MS)
+  {
+    pickVerb();
+    word = verb;
+  }
+
+  bool redrawn = needsDraw(TUBE2, word, force);
+  if (redrawn)
+  {
+    // Scale 3 fits 7 characters: longer words split after 6 with a hyphen ("Reticu-" / "lating").
+    size_t len = strlen(word);
+    if (len <= 7)
+      Pixel::textCentered(116, word, 3, color);
+    else
+    {
+      char first[8];
+      strlcpy(first, word, 7);
+      strlcat(first, "-", sizeof(first));
+      Pixel::textCentered(100, first, 3, color);
+      Pixel::textCentered(130, word + 6, Pixel::fitScale(word + 6, 3), color);
+    }
+  }
+  else
+    tfts.selectCustom(TUBE2);
+  spinner.draw(14, Pixel::Spinner::frameAt(ms), color, redrawn, 7);
+
+  // Animated dots and the CLI-style elapsed time: "(12s)".
+  static uint8_t dots_shown = 255;
+  static uint32_t secs_shown = UINT32_MAX;
+  uint8_t dots = (ms / 400) % 4;
+  if (dots != dots_shown || redrawn)
+  {
+    tfts.fillRect(0, 168, Pixel::WIDTH, 21, TFT_BLACK);
+    for (uint8_t i = 0; i < dots; i++)
+      tfts.fillRect(46 + i * 16, 180, 9, 9, Pixel::color(color));
+    dots_shown = dots;
+  }
+  uint32_t t = utcNow();
+  uint32_t secs = data.has_incident ? (t > data.incident_started ? t - data.incident_started : 0)
+                                    : (ms - verb_since) / 1000;
+  if (secs != secs_shown || redrawn)
+  {
+    char buf[16];
+    if (secs < 600)
+      snprintf(buf, sizeof(buf), "(%lus)", (unsigned long)secs);
+    else
+      snprintf(buf, sizeof(buf), "(%lum)", (unsigned long)(secs / 60));
+    Pixel::textCentered(210, buf, 2, Pixel::MUTED);
+    secs_shown = secs;
   }
 }
 
-void ClaudeApp::drawLive(bool force)
+void ClaudeApp::drawTime(bool force)
+{
+  char hh[3], mm[3], date[12];
+  snprintf(hh, sizeof(hh), "%02u", uclock.getHour());
+  snprintf(mm, sizeof(mm), "%02u", uclock.getMinute());
+  static const char *const DAYS[] = {"", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+  time_t local = uclock.loop_time + uclock.getTimeZoneOffset();
+  snprintf(date, sizeof(date), "%s %u", DAYS[weekday(local)], uclock.getDay());
+
+  if (needsDraw(TUBE3, String(hh) + mm + date, force))
+  {
+    Pixel::textCentered(22, hh, 10, Pixel::ORANGE);
+    Pixel::textCentered(116, mm, 10, Pixel::ORANGE);
+    Pixel::textCentered(200, date, 2, Pixel::MUTED);
+    seconds_shown = -1;
+  }
+  else
+    tfts.selectCustom(TUBE3);
+
+  // Colon between the rows (blinking) and a seconds bar along the bottom.
+  int8_t s = uclock.getSecond();
+  if (s != seconds_shown)
+  {
+    uint16_t on = s % 2 ? Pixel::color(Pixel::ORANGE_DIM) : TFT_BLACK;
+    tfts.fillRect(52, 98, 9, 9, on);
+    tfts.fillRect(74, 98, 9, 9, on);
+    if (s < seconds_shown || seconds_shown < 0)
+      tfts.fillRect(8, 226, 120, 5, Pixel::color(Pixel::UNLIT));
+    tfts.fillRect(8, 226, 2 * s, 5, Pixel::color(Pixel::ORANGE_DIM));
+    seconds_shown = s;
+  }
+}
+
+// "2h 14m", "3d 4h"
+static String until(uint32_t then)
 {
   uint32_t t = utcNow();
-
-  // Tube 1: the spinner while working, ? while waiting, a still ✻ otherwise.
-  if (data.state == ClaudeData::working)
-  {
-    if (needsDraw(TUBE1, "spin", force))
-    {
-      Pixel::clear();
-      spinner.draw(60, Pixel::Spinner::frameAt(millis()), Pixel::ORANGE, true);
-    }
-    else
-    {
-      tfts.selectCustom(TUBE1);
-      spinner.draw(60, Pixel::Spinner::frameAt(millis()), Pixel::ORANGE, false);
-    }
-  }
-  else if (needsDraw(TUBE1, String("still") + data.state, force))
-  {
-    Pixel::clear();
-    if (data.state == ClaudeData::waiting)
-      Pixel::textCentered(64, "?", 16, Pixel::AMBER);
-    else
-      spinner.draw(60, 4, data.state == ClaudeData::done ? Pixel::ORANGE : Pixel::MUTED, true);
-  }
-
-  // Tube 2: state word, tool, model, project.
-  static const char *const WORDS[] = {"NO DATA", "IDLE", "WORKING", "WAITING", "DONE"};
-  static const uint32_t COLORS[] = {Pixel::MUTED, Pixel::MUTED, Pixel::ORANGE, Pixel::AMBER, Pixel::GREEN};
-  const char *word = WORDS[data.state];
-  String tool = data.state == ClaudeData::working ? upper(data.tool, 11) : "";
-  String sig = String(word) + "|" + tool + "|" + data.model + "|" + data.project;
-  if (needsDraw(TUBE2, sig, force))
-  {
-    Pixel::clear();
-    Pixel::textCentered(24, word, 3, COLORS[data.state]);
-    if (tool.length())
-      Pixel::textCentered(66, tool.c_str(), 2, Pixel::TEXT);
-    if (data.model[0])
-      Pixel::textCentered(170, upper(data.model, 11).c_str(), 2, Pixel::ORANGE);
-    if (data.project[0])
-      Pixel::textCentered(200, upper(data.project, 11).c_str(), 2, Pixel::MUTED);
-  }
-
-  // Tubes 3-6: active work time, MM SS (HH MM from an hour on); frozen once the turn ended.
-  if (data.work_started == 0 || t == 0)
-  {
-    for (uint8_t tube : {TUBE3, TUBE4, TUBE5, TUBE6})
-      nixie(tube, -1, force);
-    return;
-  }
-  uint32_t end = data.work_ended ? data.work_ended : t;
-  uint32_t s = end > data.work_started ? end - data.work_started : 0;
-  uint32_t hi = s >= 3600 ? (s / 3600) % 100 : s / 60, lo = s >= 3600 ? (s / 60) % 60 : s % 60;
-  nixie(TUBE3, hi / 10, force);
-  nixie(TUBE4, hi % 10, force);
-  nixie(TUBE5, lo / 10, force);
-  nixie(TUBE6, lo % 10, force);
+  if (then == 0 || t == 0)
+    return "";
+  uint32_t s = then > t ? then - t : 0;
+  char buf[12];
+  if (s >= 86400)
+    snprintf(buf, sizeof(buf), "%lud %luh", (unsigned long)(s / 86400), (unsigned long)(s / 3600 % 24));
+  else
+    snprintf(buf, sizeof(buf), "%luh %lum", (unsigned long)(s / 3600), (unsigned long)(s / 60 % 60));
+  return buf;
 }
 
-void ClaudeApp::drawPlan(bool force)
+void ClaudeApp::drawStatus(bool force)
 {
-  uint32_t t = utcNow();
-  float pct = plan_week ? data.seven_pct : data.five_pct;
-  uint32_t resets = plan_week ? data.seven_resets : data.five_resets;
-  bool valid = data.has_limits && resets > 0 && t > 0;
-
-  char pct_text[8];
-  snprintf(pct_text, sizeof(pct_text), "%d%%", int(pct + 0.5f));
-  if (needsDraw(TUBE1, String(plan_week) + valid + pct_text, force))
-  {
-    Pixel::clear();
-    Pixel::textCentered(20, plan_week ? "7D" : "5H", 7, Pixel::ORANGE);
-    if (valid)
-    {
-      Pixel::textCentered(100, pct_text, 4, Pixel::TEXT);
-      Pixel::gauge(14, 160, 107, 40, 5, pct / 100.0f, Pixel::ORANGE, false);
-    }
-    else
-      Pixel::textCentered(110, "NO DATA", 2, Pixel::MUTED);
-  }
-
-  if (!valid)
-  {
-    for (uint8_t tube : NIXIE_TUBES)
-      nixie(tube, -1, force);
+  bool stale = data.has_status && utcNow() > data.status_fetched + STALE_S;
+  String sig = String(data.has_status) + stale + data.indicator + data.has_usage;
+  for (uint8_t i = 0; i < data.component_count; i++)
+    sig += data.component_health[i];
+  for (const OnlineData::Limit &l : data.limits)
+    sig += String(l.valid) + int(l.pct) + l.name + until(l.resets_at); // "until" changes once a minute
+  if (!needsDraw(TUBE4, sig, force))
     return;
-  }
-  uint32_t s = resets > t ? resets - t : 0;
-  if (!plan_week) // H MM SS
-  {
-    uint32_t h = min(s / 3600, uint32_t(9)), m = (s / 60) % 60, sec = s % 60;
-    int16_t values[] = {int16_t(h), int16_t(m / 10), int16_t(m % 10), int16_t(sec / 10), int16_t(sec % 10)};
-    for (uint8_t i = 0; i < 5; i++)
-      nixie(NIXIE_TUBES[i], values[i], force);
-  }
-  else // D HH MM
-  {
-    uint32_t d = min(s / 86400, uint32_t(9)), h = (s / 3600) % 24, m = (s / 60) % 60;
-    int16_t values[] = {int16_t(d), int16_t(h / 10), int16_t(h % 10), int16_t(m / 10), int16_t(m % 10)};
-    for (uint8_t i = 0; i < 5; i++)
-      nixie(NIXIE_TUBES[i], values[i], force);
-  }
-}
 
-void ClaudeApp::drawContext(bool force)
-{
-  bool valid = data.has_metrics && data.ctx_size > 0;
-  float pct = data.ctx_pct;
+  // Overall status: small icon + word
+  static const char *const CHECK[] = {".........", "........#", ".......##", "......##.", "#....##..",
+                                      "##..##...", ".####....", "..##.....", "........."};
+  static const char *const BANG[] = {"...###...", "...###...", "...###...", "...###...", "...###...",
+                                     ".........", "...###...", "...###...", "........."};
+  static const char *const QUESTION[] = {"..#####..", ".##...##.", "......##.", "....###..", "...##....",
+                                         ".........", "...##....", "...##....", "........."};
+  OnlineData::Health h = data.indicator;
+  bool unknown = !data.has_status || stale;
+  uint32_t color = unknown ? Pixel::MUTED : healthColor(h);
+  const Pixel::Ink ink[] = {{'#', color}};
+  Pixel::art(10, 8, 5, unknown ? QUESTION : h == OnlineData::ok ? CHECK : BANG, 9, ink, 1);
+  static const char *const WORDS[] = {"ALL", "MINOR", "MAJOR", "OUTAGE", "MAINT"}; // 6 chars fit beside the icon
+  static const char *const WORDS2[] = {"GOOD", "ISSUE", "ISSUE", "", ""};
+  const char *w1 = !data.has_status ? "NO" : stale ? "STALE" : WORDS[h];
+  const char *w2 = !data.has_status ? "FEED" : stale ? "" : WORDS2[h];
+  Pixel::text(62, 10, w1, 2, color);
+  Pixel::text(62, 30, w2, 2, color);
 
-  if (needsDraw(TUBE1, String(valid) + int(pct), force))
-  {
-    Pixel::clear();
-    Pixel::textCentered(20, "CTX", 5, Pixel::ORANGE);
-    if (valid)
-      Pixel::gauge(42, 80, 51, 140, 8, pct / 100.0f, Pixel::ORANGE, true);
-    else
-      Pixel::textCentered(110, "NO DATA", 2, Pixel::MUTED);
-  }
-
-  // Tubes 2-4: the percentage in big pixels, one character per tube.
-  char digits[4] = {' ', ' ', ' ', 0};
-  if (valid)
-  {
-    int p = constrain(int(pct + 0.5f), 0, 100);
-    if (p == 100)
-      digits[0] = '1', digits[1] = '0', digits[2] = '0';
-    else
-      digits[0] = p >= 10 ? '0' + p / 10 : ' ', digits[1] = '0' + p % 10, digits[2] = '%';
-  }
-  const uint8_t big_tubes[] = {TUBE2, TUBE3, TUBE4};
+  // Plan limits: name + percent, bar, time to reset
   for (uint8_t i = 0; i < 3; i++)
   {
-    char ch[2] = {digits[i], 0};
-    if (needsDraw(big_tubes[i], ch, force))
-    {
-      Pixel::clear();
-      if (ch[0] != ' ')
-        Pixel::textCentered(64, ch, 16, Pixel::ORANGE);
-    }
+    const OnlineData::Limit &l = data.limits[i];
+    int16_t y = 62 + i * 50;
+    const char *name = l.name[0] ? l.name : (i == 0 ? "5H" : i == 1 ? "7D" : "FABLE");
+    Pixel::text(6, y, name, 2, Pixel::TEXT);
+    char pct[8] = "--";
+    if (l.valid)
+      snprintf(pct, sizeof(pct), "%d%%", int(l.pct + 0.5f));
+    Pixel::text(129 - Pixel::textWidth(pct, 2), y, pct, 2, l.valid ? Pixel::ORANGE : Pixel::MUTED);
+    float f = l.valid ? constrain(l.pct / 100.0f, 0.0f, 1.0f) : 0;
+    uint32_t fill = l.pct >= 95 ? Pixel::RED : l.pct >= 80 ? Pixel::AMBER : Pixel::ORANGE;
+    tfts.fillRect(6, y + 18, 123, 8, Pixel::color(Pixel::UNLIT));
+    if (f > 0)
+      tfts.fillRect(6, y + 18, max(int16_t(2), int16_t(123 * f)), 8, Pixel::color(fill));
+    String reset = l.valid ? until(l.resets_at) : "";
+    if (reset.length())
+      Pixel::text(6, y + 30, reset.c_str(), 1, Pixel::MUTED);
   }
 
-  // Tubes 5-6: input and output tokens.
-  String in = valid ? shortCount(data.tokens_in) : "", out = valid ? shortCount(data.tokens_out) : "";
-  if (needsDraw(TUBE5, in + "/" + data.ctx_size, force))
+  // Components: one square each, with how many are up
+  uint8_t up = 0;
+  for (uint8_t i = 0; i < data.component_count; i++)
+    up += data.component_health[i] == OnlineData::ok;
+  if (data.component_count)
   {
-    Pixel::clear();
-    Pixel::textCentered(40, "IN", 4, Pixel::MUTED);
-    if (valid)
-    {
-      Pixel::textCentered(100, in.c_str(), Pixel::fitScale(in.c_str(), 4), Pixel::TEXT);
-      Pixel::textCentered(170, ("OF " + shortCount(data.ctx_size)).c_str(), 2, Pixel::MUTED);
-    }
-  }
-  if (needsDraw(TUBE6, out, force))
-  {
-    Pixel::clear();
-    Pixel::textCentered(40, "OUT", 4, Pixel::MUTED);
-    if (valid)
-      Pixel::textCentered(100, out.c_str(), Pixel::fitScale(out.c_str(), 4), Pixel::TEXT);
+    char summary[12];
+    snprintf(summary, sizeof(summary), "%u/%u UP", up, data.component_count);
+    Pixel::text(6, 214, summary, 1, Pixel::MUTED);
+    for (uint8_t i = 0; i < data.component_count; i++)
+      tfts.fillRect(64 + i * 11, 212, 9, 11, Pixel::color(healthColor(data.component_health[i])));
   }
 }
 
-void ClaudeApp::drawSession(bool force)
+void ClaudeApp::drawHistory(bool force)
 {
-  uint32_t t = utcNow();
-  bool valid = data.has_metrics;
-
-  // Cost and lines come from the status line only; without it (VS Code panel) show the output tokens.
-  char cost[12], added[12], removed[12];
-  bool has_cost = !isnan(data.cost_usd), has_lines = data.lines_added >= 0;
-  snprintf(cost, sizeof(cost), "$%.2f", has_cost ? data.cost_usd : 0.0f);
-  snprintf(added, sizeof(added), "+%ld", (long)data.lines_added);
-  snprintf(removed, sizeof(removed), "-%ld", (long)data.lines_removed);
-  String out = shortCount(data.tokens_out);
-  String sig = valid ? (has_cost ? String(cost) : out) + (has_lines ? String(added) + removed : "") : "none";
-  if (needsDraw(TUBE1, sig, force))
-  {
-    Pixel::clear();
-    if (!valid)
-      Pixel::textCentered(110, "NO DATA", 2, Pixel::MUTED);
-    else if (has_cost)
-      Pixel::textCentered(24, cost, Pixel::fitScale(cost, 4), Pixel::ORANGE);
-    else
-    {
-      Pixel::textCentered(24, "OUT", 3, Pixel::MUTED);
-      Pixel::textCentered(56, out.c_str(), Pixel::fitScale(out.c_str(), 4), Pixel::ORANGE);
-    }
-    if (valid && has_lines)
-    {
-      Pixel::textCentered(110, added, Pixel::fitScale(added, 3), Pixel::GREEN);
-      Pixel::textCentered(160, removed, Pixel::fitScale(removed, 3), Pixel::ROSE);
-    }
-  }
-
-  if (!valid || t == 0)
-  {
-    for (uint8_t tube : NIXIE_TUBES)
-      nixie(tube, -1, force);
+  String when = data.has_incident ? "" : ago(data.last_incident_at); // Changes at most once a minute
+  String sig = String(data.has_status) + data.has_incident + data.incident_name + when;
+  for (uint8_t d : data.days)
+    sig += char('0' + d);
+  if (!needsDraw(TUBE5, sig, force))
     return;
-  }
-  // Session wall time at sampling, ticking on while the session is alive.
-  bool alive = data.state != ClaudeData::idle && data.state != ClaudeData::unknown;
-  uint32_t s = data.duration_s + (alive && t > data.sampled_at ? t - data.sampled_at : 0);
-  uint32_t h = min(s / 3600, uint32_t(9)), m = (s / 60) % 60, sec = s % 60;
-  int16_t values[] = {int16_t(h), int16_t(m / 10), int16_t(m % 10), int16_t(sec / 10), int16_t(sec % 10)};
-  for (uint8_t i = 0; i < 5; i++)
-    nixie(NIXIE_TUBES[i], values[i], force);
-}
 
-void ClaudeApp::updateBacklights()
-{
-  if (strcmp(countdownApp.stateName(), "stopped") != 0)
-    return; // A running countdown owns the backlights
-  uint32_t color = backlights.getColor();
-  if (page == plan && data.has_limits)
+  Pixel::textCentered(8, "30 DAYS", 2, Pixel::ORANGE_DIM);
+  // One bar per day, today on the right; height and color by the worst incident that day.
+  static const uint8_t HEIGHT[] = {5, 26, 52, 76};
+  static const uint32_t COLOR[] = {Pixel::ORANGE_DIM, Pixel::AMBER, Pixel::ORANGE, Pixel::RED};
+  for (uint8_t i = 0; i < OnlineData::STATUS_DAYS; i++)
   {
-    float lit = NUM_BACKLIGHT_LEDS * (plan_week ? data.seven_pct : data.five_pct) / 100.0f;
-    for (uint8_t p = 0; p < NUM_BACKLIGHT_LEDS; p++) // p = 0 is the leftmost tube
-      backlights.setOverride(HOURS_TENS - p, scaleColor(color, constrain(lit - p, 0.0f, 1.0f)));
+    uint8_t impact = min(data.days[i], uint8_t(3));
+    tfts.fillRect(8 + i * 4, 104 - HEIGHT[impact], 3, HEIGHT[impact], Pixel::color(COLOR[impact]));
   }
-  else if (page == live && data.state == ClaudeData::working)
+  tfts.fillRect(8, 106, 119, 1, Pixel::color(Pixel::UNLIT));
+
+  if (!data.has_status)
+    return;
+  if (data.has_incident)
   {
-    float breath = 0.45f + 0.55f * (0.5f + 0.5f * cosf(2.0f * float(M_PI) * millis() / 3000.0f));
-    for (uint8_t led = 0; led < NUM_BACKLIGHT_LEDS; led++)
-      backlights.setOverride(led, scaleColor(color, breath));
+    Pixel::textCentered(118, "NOW", 3, Pixel::AMBER);
+    Pixel::textWrapped(4, 148, 127, data.incident_name, 2, Pixel::TEXT, 5, true);
   }
-  else if (page == live && data.state == ClaudeData::waiting)
+  else if (data.last_incident_at)
   {
-    for (uint8_t led = 0; led < NUM_BACKLIGHT_LEDS; led++)
-      backlights.setOverride(led, Pixel::AMBER);
+    Pixel::textCentered(118, "LAST", 2, Pixel::MUTED);
+    Pixel::textCentered(138, when.c_str(), Pixel::fitScale(when.c_str(), 3), Pixel::ORANGE);
+    Pixel::textWrapped(4, 168, 127, data.last_incident_name, 2, Pixel::MUTED, 4, true);
   }
 }
 
-void ClaudeApp::background()
+void ClaudeApp::drawRelease(bool force)
 {
-  if (auto_shown_at != 0 && apps.isActive(this) && millis() - auto_shown_at > AUTO_SHOW_MS &&
-      data.state != ClaudeData::waiting)
-  {
-    auto_shown_at = 0;
-    apps.switchTo(auto_from);
-    return;
-  }
-
-  ClaudeData d;
-  ClaudeDataGet(d);
-  if (d.version == seen_version)
-    return;
-  bool first = seen_version == 0; // Retained state after boot: nothing new happened
-  ClaudeData::State before = seen_state;
-  seen_version = d.version;
-  seen_state = d.state;
-  if (first || d.state == before || !stored_config.config.display.auto_claude)
+  String when = ago(data.published_at);
+  String sig = String(data.has_release) + data.version + when + (data.note_count ? data.notes[0] : "");
+  for (uint8_t d : data.release_days)
+    sig += char('0' + d);
+  if (!needsDraw(TUBE6, sig, force))
     return;
 
-  bool needs_you = d.state == ClaudeData::waiting;
-  bool finished = d.state == ClaudeData::done && before == ClaudeData::working;
-  App *current = apps.active();
-  if ((needs_you || finished) && current != nullptr && strcmp(current->name(), "clock") == 0)
+  Pixel::textCentered(8, "CLAUDE CODE", 2, Pixel::ORANGE_DIM);
+  if (!data.has_release)
   {
-    auto_from = current;
-    page = live;
-    force_next = true;
-    apps.switchTo(this);
-    auto_shown_at = millis();
-    Serial.printf("Claude: auto-switch (%s)\n", needs_you ? "waiting" : "done");
+    Pixel::textCentered(110, "NO FEED", 2, Pixel::MUTED);
+    return;
   }
-  else if (auto_shown_at != 0 && apps.isActive(this))
-    auto_shown_at = millis(); // Still happening: keep showing
+  Pixel::textCentered(32, data.version, Pixel::fitScale(data.version, 3), Pixel::ORANGE);
+  Pixel::textCentered(62, when.c_str(), 2, Pixel::MUTED);
+
+  // Releases per day for 14 days, today on the right.
+  uint8_t total = 0;
+  for (uint8_t i = 0; i < OnlineData::RELEASE_DAYS; i++)
+  {
+    uint8_t n = min(data.release_days[i], uint8_t(4));
+    total += data.release_days[i];
+    int16_t h = n ? n * 13 : 3;
+    tfts.fillRect(5 + i * 9, 132 - h, 7, h, Pixel::color(n ? Pixel::ORANGE : Pixel::UNLIT));
+  }
+  char count[16];
+  snprintf(count, sizeof(count), "%u IN 14D", total);
+  Pixel::textCentered(140, count, 2, Pixel::MUTED);
+  if (data.note_count)
+    Pixel::textWrapped(4, 166, 127, data.notes[0], 2, Pixel::TEXT, 4, false);
 }
 
 bool ClaudeApp::onButton(const ButtonEvent &event)
 {
-  auto_shown_at = 0; // The user took over: stay
-
-  if (event.button != ButtonId::Left && event.button != ButtonId::Right)
+  if (event.gesture != Gesture::Tap || (event.button != ButtonId::Left && event.button != ButtonId::Right))
     return false;
-  if (event.gesture == Gesture::Tap)
-  {
-    int8_t step = event.button == ButtonId::Right ? 1 : PAGE_COUNT - 1;
-    page = Page((page + step) % PAGE_COUNT);
-    force_next = true;
-  }
-  else if (event.gesture == Gesture::Hold && event.button == ButtonId::Right && page == plan)
-  {
-    plan_week = !plan_week;
-    force_next = true;
-  }
+  if (event.button == ButtonId::Left)
+    clawd.poke();
+  else
+    pickVerb();
   return true;
 }

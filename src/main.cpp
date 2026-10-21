@@ -139,7 +139,7 @@ void setup()
   StoredConfig::Config::Display &display = stored_config.config.display;
   if (display.is_valid != StoredConfig::valid)
   { // First boot with TubeHAX settings: defaults from _USER_DEFINES.h
-    display = {true, NIGHT_TIME, DAY_TIME, BACKLIGHT_DIMMED_INTENSITY, TFT_DIMMED_INTENSITY, true, StoredConfig::valid};
+    display = {true, NIGHT_TIME, DAY_TIME, BACKLIGHT_DIMMED_INTENSITY, TFT_DIMMED_INTENSITY, false, StoredConfig::valid};
   }
 
   backlights.begin(&stored_config.config.backlights);

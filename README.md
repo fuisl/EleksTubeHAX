@@ -34,11 +34,11 @@ For detailed pictures see the `docs/Hardware EleksTube Gen2` subdirectory.
 
 * Show the actual time on the LCDs of the clock with the selected clock face
 
-* Modes, switched with the MODE button: **Clock** and **Countdown** (`HH MM SS` up to 24 h; in the last minute "Oppenheimer" style `00 SS cc` with the hundredths racing at ~40 fps; backlight progress bar in the clock's backlight color that breathes softly in the last 10 s; at zero the tubes blink `00` over a steady backlight; keeps running in the background). **Claude** mode shows what Claude Code is doing (live state with the CLI spinner and work timer, 5-hour / 7-day plan windows, context, session), fed by the Mac bridge in [`bridge/`](bridge/README.md). A Music mode is planned, see [docs/DESIGN.md](docs/DESIGN.md).
+* Modes, switched with the MODE button: **Clock** and **Countdown** (`HH MM SS` up to 24 h; in the last minute "Oppenheimer" style `00 SS cc` with the hundredths racing at ~40 fps; backlight progress bar in the clock's backlight color that breathes softly in the last 10 s; at zero the tubes blink `00` over a steady backlight; keeps running in the background). **Claude** mode is an all-pixel Claude desk built from public data only: Clawd the animated orange block, Claude Code spinner verbs, the time in pixel digits, Anthropic's live status with plan-limit bars, a 30-day incident strip and the latest Claude Code release (see [docs/DESIGN.md](docs/DESIGN.md#claude)). The homelab fetches the data (`homelab/feeds`); nothing is sent from the Mac.
 
 * Remote control: admin page on the homelab (`http://fuisl:9001/`), MQTT commands, and an HTTP API on the clock that an iPhone Shortcut uses to start the phone's timer and the clock's countdown together. See [3.0 Admin page, iPhone timer and API](#30-admin-page-iphone-timer-and-api).
 
-* Claude mode pages: LEFT/RIGHT tap = previous/next page, RIGHT hold on the plan page = 5-hour / 7-day window. With "Jump to Claude" on, the clock switches from the time to Claude for 60 s when Claude asks for permission or finishes a turn.
+* Claude mode: LEFT tap pokes Clawd, RIGHT tap shows a new verb. Preview the layout on the desktop with `tools/preview/run.sh`.
 
 * Buttons: MODE tap = next mode, hold = back to the clock, long hold (2 s) = settings menu. POWER tap = displays and backlights on/off, hold = backlights only. LEFT/RIGHT depend on the mode (countdown: tap to set the time, hold RIGHT to start/pause, hold LEFT to reset). Full map in [docs/DESIGN.md](docs/DESIGN.md#modes-and-button-map).
 
@@ -58,7 +58,7 @@ For detailed pictures see the `docs/Hardware EleksTube Gen2` subdirectory.
 
 ### 3.0 Admin page, iPhone timer and API
 
-**Admin page:** <http://fuisl:9001/> (or `http://192.168.1.13:9001/`). Served by the homelab's Mosquitto (`homelab/web/`, deployed with `homelab/deploy.sh`), so it costs no extra container. Sign in as MQTT user `admin`; the password is `TUBEHAX_ADMIN_PASSWORD` in `~/.config/tubehax/broker.env` (copy it with `grep ADMIN_PASSWORD ~/.config/tubehax/broker.env | cut -d= -f2 | pbcopy`). It shows a live countdown, presets, pause/reset, mode switch, displays/backlights, what Claude is doing, clock status (WiFi, uptime, heap), settings (12/24 h, UTC offset, backlight brightness and color, night dimming window and levels, jump to Claude) and the raw MQTT traffic.
+**Admin page:** <http://fuisl:9001/> (or `http://192.168.1.13:9001/`). Served by the homelab's Mosquitto (`homelab/web/`, deployed with `homelab/deploy.sh`), so it costs no extra container. Sign in as MQTT user `admin`; the password is `TUBEHAX_ADMIN_PASSWORD` in `~/.config/tubehax/broker.env` (copy it with `grep ADMIN_PASSWORD ~/.config/tubehax/broker.env | cut -d= -f2 | pbcopy`). It shows a live countdown, presets, pause/reset, mode switch, displays/backlights, Claude's public status and Claude Code version, clock status (WiFi, uptime, heap), settings (12/24 h, UTC offset, backlight brightness and color, night dimming window and levels) and the raw MQTT traffic.
 
 **iPhone timer.** iOS doesn't let any app or automation see the Clock app's timers, so the clock can't follow a timer started in the Clock app. Instead, one Shortcut starts both the iPhone timer (with its Dynamic Island / Lock Screen countdown) and the clock's countdown, from a single tap and with no typing:
 

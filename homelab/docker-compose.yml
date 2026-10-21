@@ -5,7 +5,7 @@ services:
     container_name: tubehax-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"   # MQTT (clock, Mac bridge)
+      - "1883:1883"   # MQTT (clock; feeds connect inside the compose network)
       - "9001:9001"   # Admin page (http://fuisl:9001/) + MQTT over WebSockets
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -16,6 +16,20 @@ services:
       resources:
         limits:
           memory: 64m
+
+  feeds:
+    # Public Claude info (status page, Claude Code releases) -> retained tubehax/online/* topics.
+    build: ./feeds
+    container_name: tubehax-feeds
+    restart: unless-stopped
+    depends_on: [mosquitto]
+    env_file: feeds.env  # MQTT_USER / MQTT_PASSWORD, created on the homelab only (see README)
+    environment:
+      MQTT_HOST: mosquitto
+    deploy:
+      resources:
+        limits:
+          memory: 48m
 
 volumes:
   mosquitto-data:

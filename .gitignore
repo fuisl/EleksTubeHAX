@@ -50,3 +50,4 @@ backups/
 
 # Broker password file (lives only on the homelab).
 homelab/mosquitto/passwd
+homelab/feeds.env

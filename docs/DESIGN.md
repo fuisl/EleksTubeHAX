@@ -24,39 +24,34 @@ Ideas and progress are tracked in the [GitHub Project](https://github.com/users/
 ## System architecture
 
 ```
- Mac (your machine)                                Homelab               Clock
-┌───────────────────────────────────────┐        ┌──────────┐        ┌────────────────┐
-│ Claude Code                           │        │          │        │ ESP32 firmware │
-│  ├─ statusLine script ──┐             │        │          │        │  AppManager    │
-│  └─ async hooks ────────┤ unix socket │  MQTT  │ Mosquitto│  MQTT  │   ├ Clock      │
-│                         ▼             ├───────▶│  broker  ├───────▶│   ├ Countdown  │
-│ macOS Now Playing ─▶ tubehax-bridge   │◀───────┤ (retain, │◀───────┤   ├ Claude     │
-│ frontmost app    ─▶ (Python, uv,      │ cmds   │  LWT)    │ status │   └ Music      │
-│                      launchd agent)   │        │          │        │                │
-└───────────────────────────────────────┘        └──────────┘        └────────────────┘
+ Internet                          Homelab (fuisl)                         Clock
+┌────────────────────────┐        ┌──────────────────────────┐          ┌────────────────┐
+│ status.claude.com      │  HTTPS │ tubehax-feeds ──┐        │          │ ESP32 firmware │
+│ GitHub releases        ├───────▶│ (Python, 16 MB) │ MQTT   │   MQTT   │  AppManager    │
+│ (anthropics/claude-    │        │                 ▼        ├─────────▶│   ├ Clock      │
+│  code)                 │        │ Mosquitto (retain, LWT)  │◀─────────┤   ├ Countdown  │
+└────────────────────────┘        │  :9001 admin page + WS   │ state    │   └ Claude     │
+                                  └──────────────────────────┘          └────────────────┘
 ```
 
-A browser admin page (any device on the LAN or NetBird) talks to the same broker over MQTT-over-WebSockets — see [Homelab](#homelab) and [Admin web](#admin-web).
+The Mac sends nothing: an earlier version fed Claude Code hooks and the status line through a Mac daemon, removed by request. Everything Claude mode shows is public and fetched on the homelab. A browser admin page (LAN or NetBird) talks to the same broker over MQTT-over-WebSockets — see [Homelab](#homelab) and [Admin web](#admin-web).
 
 Principles:
 
-1. **The clock never talks to the Mac directly.** Everything goes through the broker, so the clock keeps working when the Mac sleeps, and the bridge keeps working when the clock reboots.
-2. **Publish facts, not frames.** The bridge sends timestamps (`started_at`, `resets_at`, song `position` + `sampled_at`); the clock interpolates locally with its own RTC/NTP time. Displays tick smoothly with very little MQTT traffic.
+1. **The clock only talks to the broker** (plus NTP and its own small HTTP API). Fetching and condensing web data happens on the homelab, so the ESP32 needs no TLS and parses a few hundred bytes instead of 200 KB.
+2. **Publish facts, not frames.** Timestamps (`started_at`, `resets_at`, `published_at`) let the clock compute ages and countdowns locally with its own RTC/NTP time.
 3. **State topics are retained** so a freshly (re)connected clock immediately shows the right thing.
-4. **Hooks and the status line must never slow Claude down.** They hand data to the bridge over a local socket and exit; hooks run with `"async": true`.
 
-### Claude Code data sources
+### Claude data sources (public)
 
-| Need | Source | Fields |
+| Shown | Source | Refresh |
 |---|---|---|
-| Working / waiting / done state | async hooks | `UserPromptSubmit` → working, `PreToolUse`/`PostToolUse` → tool activity, `Notification` (`permission_prompt`, `idle_prompt`) → waiting for you, `Stop` → done, `SessionStart`/`SessionEnd` |
-| Active work timer | hooks | timestamp of `UserPromptSubmit` until `Stop` |
-| Plan usage window | statusLine JSON | `rate_limits.five_hour.{used_percentage,resets_at}`, `rate_limits.seven_day.*` (Pro/Max only — we are on Max; present after the first API response) |
-| Context / tokens | statusLine JSON | `context_window.{used_percentage,total_input_tokens,total_output_tokens,context_window_size}` |
-| Session elapsed / cost | statusLine JSON | `cost.{total_duration_ms,total_cost_usd,total_lines_added,total_lines_removed}`, `model.display_name` |
-| "I switched to the terminal" | bridge (macOS) | Claude Code has **no** focus event; the bridge watches the frontmost app instead |
+| Overall status, components, open incident | `https://status.claude.com/api/v2/summary.json` | 2 min |
+| 30-day incident strip, last incident | `https://status.claude.com/api/v2/incidents.json` (last 50) | 10 min |
+| Claude Code version, release strip, first change | `https://api.github.com/repos/anthropics/claude-code/releases` | 15 min |
+| Plan limits (5 hours, 7 days, Fable weekly) | not public: needs the account's login. Display is ready (`tubehax/online/usage`), source to be decided | — |
 
-The status line is re-run on each assistant message (debounced 300 ms; set `refreshInterval` for idle ticking). Multiple concurrent sessions are keyed by `session_id`; the clock shows the most recently active one.
+Not available without the Mac: what a session is doing (thinking, tools), its tokens and cost.
 
 ## Modes and button map
 
@@ -74,7 +69,7 @@ Modes cycle in this order: **Clock → Claude → Countdown → Music → Clock*
 | Countdown (stopped) | − time | + time | clear to 00:00 | start |
 | Countdown (running / paused) | — | — | reset to the set time | pause / resume |
 | Countdown (alarm at zero) | dismiss | dismiss | dismiss | dismiss |
-| Claude | previous page | next page | — | pin page (disable auto-switch) |
+| Claude | poke Clawd | new verb | — | — |
 | Music | previous track | next track | — | play / pause |
 | Settings menu | value − | value + | — | — |
 
@@ -96,15 +91,16 @@ Existing behaviour, ported into the mode framework: HH:MM:SS nixie, 12/24 h, nig
 - Runs in the background of other modes with a draining backlight progress bar (breathing while paused), and pops up when it reaches zero.
 
 ### Claude
-Pages (LEFT/RIGHT):
-1. **Live** — tube 1: animated spinner glyph in orange (static `✻` when idle, amber `?` when waiting for permission); tube 2: state word / model in pixel font; tubes 3–6: active work timer `MM SS` in nixie.
-2. **Plan window** — time until the 5-hour window resets as `H MM SS` nixie; backlights show usage % (green → orange → red). A second press shows the 7-day window.
-3. **Context** — context used %, input/output tokens, rendered in the orange pixel theme with a gauge.
-4. **Session** — elapsed session time `HH MM SS` nixie, cost in USD, lines +/−.
+All pixel, no nixie images, from public data (OnlineData.h). Tubes from the left:
 
-Implemented (`src/ClaudeApp.cpp`, `src/Pixel.cpp`): the pixel theme draws the 5x7 font as blocks with a 1 px gap (pixel-matrix look), the CLI spinner `· ✢ ✳ ✶ ✻ ✽` on an 11x11 block grid (only changed blocks are redrawn, ~120 ms per frame), and segmented gauges, all dimmed with the night setting. Page 2 shows a 7-day window as `D HH MM`. Plan usage is a backlight bar in the clock's own color rather than green → orange → red (calmer); waiting is steady amber. Without a status line (VS Code panel) the session page shows output tokens instead of cost.
+1. **Clawd** — an orange block with eyes, stub arms and legs (`src/Clawd.cpp`, 15 x 16 grid of 9 px cells, only changed cells redrawn). Idle it blinks, looks around, waves, types on a little keyboard and hops. LEFT tap pokes it (hop + wave); it glances at tube 2 whenever the word changes; sweats and glances around while an incident is open; sleeps with drifting z's during night dimming.
+2. **Verb** — the CLI spinner `· ✢ ✳ ✶ ✻ ✽` above a Claude Code spinner verb ("Combobulating…", new one every 9 s or on RIGHT tap) with animated dots and an elapsed `(12s)`. During an incident it shows what Anthropic is doing instead ("Investigating", "Fixing", "Monitoring") in amber with the incident's age.
+3. **Time** — `HH` over `MM` in big pixel digits, blinking colon, weekday and date, seconds bar.
+4. **Status** — check / `!` icon with ALL GOOD / MINOR ISSUE / MAJOR ISSUE / OUTAGE, three plan-limit bars (5H, 7D, FABLE: percent, bar, time to reset; amber from 80 %, red from 95 %), and one square per component.
+5. **30 days** — one bar per day, height and color by the worst incident (today on the right); below, the open incident or the last one with its age.
+6. **Claude Code** — latest version and age, releases per day for 14 days, the first line of the changelog.
 
-Auto-switch (setting `auto_claude`, on by default): when the clock shows the time and Claude asks for permission or finishes a turn, it switches to Claude/Live, and back after 60 s without news (any button keeps it there).
+Palette: a true orange `#F5781E` (the brand's salmon looks pink on these IPS panels), dim orange for captions, amber for attention, red only for outages. Backlights are left alone. Desktop preview of the real drawing code: `tools/preview/run.sh` (PNG per scene: normal, typing, incident, night).
 
 ### Music
 - Song position `MM SS` in nixie (tubes 3–6, interpolated locally), track/artist scrolling in the orange pixel theme (tubes 1–2), progress shown on the backlights.
@@ -115,19 +111,15 @@ Claude CLI-style pixel animation across the six tubes when nothing is happening.
 
 ## MQTT contract
 
-v1 for the clock and Claude topics; music and focus are still drafts.
+All v1. The feeder republishes on change and at least hourly; the clock marks status older than 2 h as STALE.
 
 Prefix: `tubehax/`. JSON payloads, UTF-8. Timestamps are Unix epoch seconds (float allowed).
 
 | Topic | Dir | Retained | Payload |
 |---|---|---|---|
-| `tubehax/claude/state` | bridge → clock | yes | `{"v":1,"session_id","state":"idle\|working\|waiting\|done","tool","model","project","since","work_started","work_ended","sessions"}` |
-| `tubehax/claude/metrics` | bridge → clock | yes | `{"v":1,"session_id","model","project","ctx_pct","ctx_size","tokens_in","tokens_out","cost_usd","duration_ms","lines_added","lines_removed","sampled_at"}` (cost and lines `null` without a status line) |
-| `tubehax/claude/limits` | bridge → clock | yes | `{"v":1,"five_hour":{"pct","resets_at"},"seven_day":{"pct","resets_at"},"sampled_at"}` |
-| `tubehax/bridge/status` | bridge → broker | yes (LWT) | `online` / `offline` |
-| `tubehax/music/now` | bridge → clock | yes | `{"playing","title","artist","position","duration","sampled_at","rate"}` |
-| `tubehax/mac/focus` | bridge → clock | no | `{"app","is_claude_terminal"}` |
-| `tubehax/music/cmd` | clock → bridge | no | `"next" \| "prev" \| "toggle"` |
+| `tubehax/online/status` | feeds → clock | yes | `{"v":1,"indicator":"none\|minor\|major\|critical\|maintenance","description","components":[[name,status]…],"incident":{"name","impact","status","started"}\|null,"days":[30 × 0..3],"last_incident":{"name","at"}\|null,"fetched_at"}` (~420 B) |
+| `tubehax/online/release` | feeds → clock | yes | `{"v":1,"version","published_at","days":[14 × count],"notes":[…],"fetched_at"}` (~300 B) |
+| `tubehax/online/usage` | (not set up) → clock | yes | `{"five_hour":{"pct","resets_at"},"seven_day":{…},"model_week":{"name","pct","resets_at"},"fetched_at"}` |
 | `tubehax/clock/<id>/state` | clock → broker | yes | see [clock contract](#mqtt-contract-v1-clock) |
 | `tubehax/clock/<id>/cmd` | any → clock | no | see [clock contract](#mqtt-contract-v1-clock) |
 | `elekstubehax/<id>/status` | clock → broker | yes (LWT) | `online` / `offline` (Home Assistant availability topic, reused) |
@@ -146,7 +138,7 @@ Implemented in `src/Remote.cpp`. The same JSON commands are accepted by the cloc
  "displays": true, "backlights": false,
  "settings": {"twelve_hour": false, "blank_hours_zero": false, "utc_offset_min": 420,
               "dimming": true, "night_start": 22, "day_start": 7, "night_backlight": 1, "night_tft": 20,
-              "backlight_intensity": 6, "backlight_hue": 26, "auto_claude": true}}
+              "backlight_intensity": 6, "backlight_hue": 26}}
 ```
 
 `start` sets the duration in seconds and starts right away (and shows the countdown); `set` only sets it (stopped); `toggle` starts, pauses or resumes. Unknown modes or actions are rejected (HTTP 400, logged on serial for MQTT). Settings are range-checked (`night_backlight` 0–7, `night_tft` 0–255, hours 0–23, `utc_offset_min` −720…840, `backlight_hue` 0–359), applied at once and saved to NVS 2 s after the last change. The state echoes them under `"settings"` (with `backlight_rgb` instead of the hue). Not yet remote: broker host/credentials.
@@ -170,7 +162,7 @@ Implemented in `src/Remote.cpp`. The same JSON commands are accepted by the cloc
 - Done: MQTT reconnects back off exponentially (1 s doubling to 60 s, plus up to 25 % jitter).
 - Not split into more tasks: a second network task's stack (~9 KB of heap) made the countdown's hundredths cache land in a heap layout where drawing fell from 40 to 1 fps. Heap is tight (~150 KB free, ~60 KB during the last minute); measure fps after any change that grows RAM use.
 - The clock's 2.4 GHz link loses 10–80 % of pings while other hosts on the LAN are clean (RSSI −48 dBm, channel 1, modem sleep off). Not fixed by lower TX power. Everything tolerates it; commands may arrive a few seconds late.
-- LWT + retained `status` so the broker and the bridge know when the clock is offline.
+- LWT + retained `status` so the broker and the admin page know when the clock is offline.
 - Re-subscribe on every reconnect; retained topics restore the state.
 - Broker host/port/credentials changeable at runtime (stored in NVS) without reflashing; optional mDNS lookup of the homelab broker.
 - Small unobtrusive "link" indicator (pixel icon) when the broker is unreachable; time display never depends on the network.
@@ -181,7 +173,7 @@ The homelab (`fuisl`, Ubuntu 24.04, LAN `192.168.1.13`, NetBird `100.82.196.126`
 
 | Service | Port | Notes |
 |---|---|---|
-| Mosquitto 2.0 | 1883 (MQTT), 9001 (WebSockets) | Password auth, no anonymous access; users `clock`, `bridge`, `admin`. Persistence on, so retained state survives restarts. 64 MB memory cap. |
+| Mosquitto 2.0 | 1883 (MQTT), 9001 (WebSockets) | Password auth, no anonymous access; users `clock`, `feeds`, `admin`. Persistence on, so retained state survives restarts. 64 MB memory cap. |
 | Admin web | served by Mosquitto on 9001 (stage 1) | See below. |
 
 - LAN only for now: the clock connects to `192.168.1.13:1883`. `fuisl` resolves through NetBird on the Mac; other LAN devices use `fuisl.local` or the IP.
@@ -198,8 +190,8 @@ Features, roughly in order:
 1. Live clock status: online/offline (LWT), current mode, WiFi RSSI, IP, firmware version, uptime.
 2. Switch mode; set / start / pause / reset the countdown; trigger Claude or Music views.
 3. Display + backlight: on/off, brightness, night-dimming window, backlight color/pattern.
-4. Live mirror of what the bridge publishes (Claude state, limits, now playing) for debugging.
-5. Settings that today require a reflash: timezone, 12/24 h, broker host, auto-switch rules.
+4. Claude status, plan limits (once connected), last incident and Claude Code version from the feeds; live MQTT log.
+5. Settings that used to require a reflash: timezone, 12/24 h, backlight, night dimming (broker host still open).
 6. Firmware: upload a `.bin`, the clock pulls it over HTTP (OTA) — needs the stage-2 backend or an HTTP endpoint on the clock.
 
 ## Flash budget
@@ -223,6 +215,7 @@ src/, include/        firmware (single target: EleksTube_Gen2)
 src/apps/             one file per mode (Clock, Countdown, Claude, Music, Settings)
 src/render/           NixieRenderer, PixelRenderer (Claude theme)
 data/                 LittleFS assets: our clock face + pixel assets
-bridge/               tubehax-bridge (Python, uv project), launchd plist, Claude Code hook/statusLine scripts
+homelab/              Mosquitto config, admin page (web/), feeds service (feeds/), deploy scripts
+tools/preview/        desktop render of Claude mode from the firmware's drawing code
 docs/DESIGN.md        this file
 ```
